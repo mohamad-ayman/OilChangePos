@@ -94,21 +94,10 @@ public partial class MainForm : Form
     private readonly DateTimePicker _reportToPicker = new() { Width = 150 };
     private readonly DataGridView _profitByInvoiceGrid = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, ReadOnly = true };
     private readonly DataGridView _profitByProductGrid = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, ReadOnly = true };
-    private readonly Label _profitRollupLabel = new()
-    {
-        Dock = DockStyle.Top,
-        AutoSize = true,
-        TextAlign = ContentAlignment.TopRight,
-        Font = UiFontSection,
-        ForeColor = Color.FromArgb(44, 62, 80),
-        BackColor = Color.FromArgb(232, 238, 245),
-        RightToLeft = RightToLeft.Yes,
-        Padding = new Padding(16, 14, 16, 14),
-        Margin = new Padding(0, 0, 0, 10),
-        BorderStyle = BorderStyle.None,
-        MaximumSize = new Size(3200, 0),
-        UseCompatibleTextRendering = false
-    };
+    /// <summary>Profit module KPI values (updated in <see cref="RefreshReportsAsync"/>).</summary>
+    private readonly Label _profitKpiRevenueVal = new() { Text = "—", AutoSize = false, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.No };
+    private readonly Label _profitKpiCogsVal = new() { Text = "—", AutoSize = false, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.No };
+    private readonly Label _profitKpiProfitVal = new() { Text = "—", AutoSize = false, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.No };
     private readonly CheckBox _profitAllBranchesCheck = new() { Text = "ربحية جميع الفروع (تجاهل المستودع المحدد)", AutoSize = true, RightToLeft = RightToLeft.Yes };
     private readonly DataGridView _stockFromMovementsGrid = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, ReadOnly = true };
     private readonly ComboBox _reportHistoryProductCombo = new() { Width = 380, DropDownStyle = ComboBoxStyle.DropDownList };

@@ -56,8 +56,9 @@ public partial class MainForm
         _profitByInvoiceGrid.DataSource = await _reportService.GetInvoiceProfitBreakdownAsync(from, to, profitWh);
         _profitByProductGrid.DataSource = await _reportService.GetProductProfitBreakdownAsync(from, to, profitWh);
         var rollup = await _reportService.GetProfitRollupAsync(from, to, profitWh);
-        _profitRollupLabel.Text =
-            $"إجمالي الإيراد {rollup.TotalRevenue.ToString("n2", ReportsCulture)} · تكلفة مقدرة (متوسط شراء رئيسي) {rollup.TotalEstimatedCogs.ToString("n2", ReportsCulture)} · ربح مقدر {rollup.TotalEstimatedGrossProfit.ToString("n2", ReportsCulture)}";
+        _profitKpiRevenueVal.Text = rollup.TotalRevenue.ToString("n2", ReportsCulture);
+        _profitKpiCogsVal.Text = rollup.TotalEstimatedCogs.ToString("n2", ReportsCulture);
+        _profitKpiProfitVal.Text = rollup.TotalEstimatedGrossProfit.ToString("n2", ReportsCulture);
 
         _stockFromMovementsGrid.DataSource = await _reportService.GetCurrentStockFromMovementsAsync(stockScopeWh);
         await LoadReportHistoryProductComboAsync();
@@ -592,31 +593,191 @@ public partial class MainForm
         outer.Dock = DockStyle.Fill;
         overviewPanel.Controls.Add(outer);
 
-        var profitPanel = new Panel { RightToLeft = RightToLeft.Yes };
-        var profitHost = new Panel { Dock = DockStyle.Fill, RightToLeft = RightToLeft.Yes };
-        var profitTop = new FlowLayoutPanel
+        var profitPanel = new Panel { RightToLeft = RightToLeft.Yes, Padding = new Padding(14, 10, 14, 12), BackColor = Color.FromArgb(245, 247, 250) };
+        // Scroll the whole profitability column: KPI + filter + both grids need more vertical space than the tab often has.
+        var profitScrollHost = new Panel
         {
-            Dock = DockStyle.Top,
-            Height = 40,
-            FlowDirection = FlowDirection.RightToLeft,
-            Padding = new Padding(8, 4, 8, 4),
-            WrapContents = false
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            BackColor = Color.FromArgb(245, 247, 250),
+            RightToLeft = RightToLeft.Yes
         };
-        profitTop.Controls.Add(_profitAllBranchesCheck);
-        StyleReportGrid(_profitByInvoiceGrid);
-        StyleReportGrid(_profitByProductGrid);
+        var profitLayout = new TableLayoutPanel
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Dock = DockStyle.Top,
+            ColumnCount = 1,
+            RowCount = 5,
+            RightToLeft = RightToLeft.Yes,
+            BackColor = Color.Transparent
+        };
+        profitLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        profitLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        profitLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        profitLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 126f));
+        profitLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        profitLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 560f));
+
+        void SyncProfitScrollLayout(object? _, EventArgs __)
+        {
+            var innerW = profitScrollHost.DisplayRectangle.Width;
+            profitLayout.Width = Math.Max(320, innerW);
+        }
+
+        profitScrollHost.HandleCreated += SyncProfitScrollLayout;
+        profitScrollHost.Resize += SyncProfitScrollLayout;
+
+        var profitTitle = new Label
+        {
+            Text = "الربحية التقديرية",
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            Font = UiFontSection,
+            ForeColor = UiTextPrimary,
+            TextAlign = ContentAlignment.TopRight,
+            RightToLeft = RightToLeft.Yes,
+            Margin = new Padding(0, 0, 0, 4),
+            UseCompatibleTextRendering = false
+        };
+        var profitSubtitle = new Label
+        {
+            Text = "مقارنة صافي الإيراد وتكلفة البضاعة المقدرة (من متوسط شراء المستودع الرئيسي) ثم الربح المقدّر — لكل فاتورة ولتجميع حسب الصنف.",
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            MaximumSize = new Size(980, 0),
+            Font = new Font(UiFont, FontStyle.Regular),
+            ForeColor = UiTextSecondary,
+            TextAlign = ContentAlignment.TopRight,
+            RightToLeft = RightToLeft.Yes,
+            Margin = new Padding(0, 0, 0, 10),
+            UseCompatibleTextRendering = false
+        };
+
+        var profitKpiFlow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Height = 118,
+            WrapContents = true,
+            AutoScroll = false,
+            Padding = new Padding(4, 4, 4, 6),
+            BackColor = Color.FromArgb(245, 247, 250),
+            RightToLeft = RightToLeft.Yes,
+            FlowDirection = FlowDirection.RightToLeft
+        };
+        profitKpiFlow.Controls.Add(BuildAnalyticsKpiCard("إجمالي الإيراد", _profitKpiRevenueVal, Color.FromArgb(41, 128, 185), true));
+        profitKpiFlow.Controls.Add(BuildAnalyticsKpiCard("تكلفة مقدّرة (رئيسي)", _profitKpiCogsVal, Color.FromArgb(230, 126, 34), true));
+        profitKpiFlow.Controls.Add(BuildAnalyticsKpiCard("ربح مقدّر", _profitKpiProfitVal, Color.FromArgb(39, 174, 96), true));
+
+        var profitFilterBar = new Panel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            MinimumSize = new Size(0, 52),
+            BackColor = Color.White,
+            Padding = new Padding(14, 12, 14, 12),
+            Margin = new Padding(0, 0, 0, 12),
+            BorderStyle = BorderStyle.FixedSingle,
+            RightToLeft = RightToLeft.Yes
+        };
+        _profitAllBranchesCheck.Font = UiFont;
+        _profitAllBranchesCheck.Margin = new Padding(0, 2, 0, 0);
+        _profitAllBranchesCheck.AutoSize = true;
+        var profitFilterHint = new Label
+        {
+            Text = "عند التفعيل: تُحسب الأرقام أعلاه وجداول الأسفل على مستوى كل الفروع (للمدير فقط).",
+            AutoSize = true,
+            Font = new Font(UiFont, FontStyle.Italic),
+            ForeColor = UiTextSecondary,
+            TextAlign = ContentAlignment.MiddleRight,
+            RightToLeft = RightToLeft.Yes,
+            Margin = new Padding(16, 4, 0, 0),
+            MaximumSize = new Size(720, 0),
+            UseCompatibleTextRendering = false
+        };
+        var profitFilterInner = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = true,
+            AutoSize = true,
+            Padding = Padding.Empty,
+            BackColor = Color.White,
+            RightToLeft = RightToLeft.Yes
+        };
+        profitFilterInner.Controls.Add(profitFilterHint);
+        profitFilterInner.Controls.Add(_profitAllBranchesCheck);
+        profitFilterBar.Controls.Add(profitFilterInner);
+
+        ApplyProfitModuleGridChrome(_profitByInvoiceGrid);
+        ApplyProfitModuleGridChrome(_profitByProductGrid);
         ConfigureProfitByInvoiceColumns();
         ConfigureProfitByProductColumns();
+
+        var invoiceSection = new Panel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12, 10, 12, 12),
+            BackColor = Color.White,
+            BorderStyle = BorderStyle.FixedSingle,
+            RightToLeft = RightToLeft.Yes,
+            Margin = new Padding(0, 0, 0, 0)
+        };
+        var invoiceSectionTitle = new Label
+        {
+            Text = "١ · حسب الفاتورة",
+            Dock = DockStyle.Top,
+            Height = 30,
+            Font = UiFontSection,
+            ForeColor = UiTextPrimary,
+            TextAlign = ContentAlignment.TopRight,
+            RightToLeft = RightToLeft.Yes,
+            Padding = new Padding(0, 0, 0, 8),
+            UseCompatibleTextRendering = false
+        };
+        _profitByInvoiceGrid.Dock = DockStyle.Fill;
+        invoiceSection.Controls.Add(invoiceSectionTitle);
+        invoiceSection.Controls.Add(_profitByInvoiceGrid);
+
+        var productSection = new Panel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12, 10, 12, 12),
+            BackColor = Color.White,
+            BorderStyle = BorderStyle.FixedSingle,
+            RightToLeft = RightToLeft.Yes
+        };
+        var productSectionTitle = new Label
+        {
+            Text = "٢ · تجميع حسب الصنف",
+            Dock = DockStyle.Top,
+            Height = 30,
+            Font = UiFontSection,
+            ForeColor = UiTextPrimary,
+            TextAlign = ContentAlignment.TopRight,
+            RightToLeft = RightToLeft.Yes,
+            Padding = new Padding(0, 0, 0, 8),
+            UseCompatibleTextRendering = false
+        };
+        _profitByProductGrid.Dock = DockStyle.Fill;
+        productSection.Controls.Add(productSectionTitle);
+        productSection.Controls.Add(_profitByProductGrid);
+
         var profitSplit = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, RightToLeft = RightToLeft.Yes };
-        ApplyInitialSplitterDistance(profitSplit, 360);
-        profitSplit.Panel1.Controls.Add(_profitByInvoiceGrid);
-        profitSplit.Panel2.Controls.Add(_profitByProductGrid);
-        _profitRollupLabel.Dock = DockStyle.Top;
-        profitHost.Controls.Add(profitTop);
-        profitHost.Controls.Add(_profitRollupLabel);
-        profitHost.Controls.Add(profitSplit);
-        profitHost.Dock = DockStyle.Fill;
-        profitPanel.Controls.Add(profitHost);
+        // Do not set Panel*MinSize here: the control often has no real height yet, and WinForms throws when the new mins exceed SplitterDistance.
+        // ApplyInitialSplitterDistance keeps mins at 25 until the client size can honor these targets, then applies them safely.
+        ApplyInitialSplitterDistance(profitSplit, 340, 200, 200);
+        profitSplit.Panel1.Controls.Add(invoiceSection);
+        profitSplit.Panel2.Controls.Add(productSection);
+
+        profitLayout.Controls.Add(profitTitle, 0, 0);
+        profitLayout.Controls.Add(profitSubtitle, 0, 1);
+        profitLayout.Controls.Add(profitKpiFlow, 0, 2);
+        profitLayout.Controls.Add(profitFilterBar, 0, 3);
+        profitLayout.Controls.Add(profitSplit, 0, 4);
+        profitScrollHost.Controls.Add(profitLayout);
+        profitPanel.Controls.Add(profitScrollHost);
 
         var stockPanel = new Panel { RightToLeft = RightToLeft.Yes };
         var stockHost = new Panel { Dock = DockStyle.Fill, RightToLeft = RightToLeft.Yes };
@@ -792,18 +953,30 @@ public partial class MainForm
         grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(TransferLedgerRowDto.Notes), HeaderText = "ملاحظات", FillWeight = 22, ReadOnly = true });
     }
 
+    private static void ApplyProfitModuleGridChrome(DataGridView g)
+    {
+        StyleReportGrid(g);
+        // Taller headers + padding so wrapped Arabic column titles are not clipped vertically.
+        g.ColumnHeadersHeight = 58;
+        g.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+        g.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.True;
+        g.ColumnHeadersDefaultCellStyle.Padding = new Padding(10, 12, 10, 12);
+        g.RowTemplate.Height = 40;
+        g.DefaultCellStyle.Padding = new Padding(12, 8, 12, 8);
+    }
+
     private void ConfigureProfitByInvoiceColumns()
     {
         _profitByInvoiceGrid.AutoGenerateColumns = false;
         _profitByInvoiceGrid.Columns.Clear();
         _profitByInvoiceGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        _profitByInvoiceGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InvoiceProfitDto.InvoiceNumber), HeaderText = "فاتورة", FillWeight = 14, ReadOnly = true });
-        _profitByInvoiceGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InvoiceProfitDto.InvoiceDateUtc), HeaderText = "الوقت (UTC)", FillWeight = 12, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm" } });
-        _profitByInvoiceGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InvoiceProfitDto.WarehouseName), HeaderText = "فرع", FillWeight = 12, ReadOnly = true });
-        _profitByInvoiceGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InvoiceProfitDto.NetRevenue), HeaderText = "صافي", FillWeight = 12, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
-        _profitByInvoiceGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InvoiceProfitDto.EstimatedCogs), HeaderText = "تكلفة مقدرة", FillWeight = 12, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
-        _profitByInvoiceGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InvoiceProfitDto.EstimatedGrossProfit), HeaderText = "ربح مقدر", FillWeight = 12, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
-        _profitByInvoiceGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InvoiceProfitDto.MarginPercent), HeaderText = "هامش %", FillWeight = 10, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+        _profitByInvoiceGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InvoiceProfitDto.InvoiceNumber), HeaderText = "رقم الفاتورة", FillWeight = 16, MinimumWidth = 108, ReadOnly = true });
+        _profitByInvoiceGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InvoiceProfitDto.InvoiceDateUtc), HeaderText = "الوقت (UTC)", FillWeight = 14, MinimumWidth = 128, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm" } });
+        _profitByInvoiceGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InvoiceProfitDto.WarehouseName), HeaderText = "الفرع", FillWeight = 12, MinimumWidth = 88, ReadOnly = true });
+        _profitByInvoiceGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InvoiceProfitDto.NetRevenue), HeaderText = "صافي الإيراد", FillWeight = 13, MinimumWidth = 102, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+        _profitByInvoiceGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InvoiceProfitDto.EstimatedCogs), HeaderText = "تكلفة مقدّرة", FillWeight = 13, MinimumWidth = 102, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+        _profitByInvoiceGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InvoiceProfitDto.EstimatedGrossProfit), HeaderText = "ربح مقدّر", FillWeight = 13, MinimumWidth = 96, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+        _profitByInvoiceGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InvoiceProfitDto.MarginPercent), HeaderText = "هامش تقريبي %", FillWeight = 10, MinimumWidth = 88, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
     }
 
     private void ConfigureProfitByProductColumns()
@@ -811,11 +984,11 @@ public partial class MainForm
         _profitByProductGrid.AutoGenerateColumns = false;
         _profitByProductGrid.Columns.Clear();
         _profitByProductGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        _profitByProductGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(ProductProfitDto.ProductName), HeaderText = "الصنف", FillWeight = 28, ReadOnly = true });
-        _profitByProductGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(ProductProfitDto.QuantitySold), HeaderText = "كمية مباعة", FillWeight = 12, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
-        _profitByProductGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(ProductProfitDto.Revenue), HeaderText = "إيراد", FillWeight = 12, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
-        _profitByProductGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(ProductProfitDto.EstimatedCogs), HeaderText = "تكلفة مقدرة", FillWeight = 12, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
-        _profitByProductGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(ProductProfitDto.EstimatedGrossProfit), HeaderText = "ربح مقدر", FillWeight = 12, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+        _profitByProductGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(ProductProfitDto.ProductName), HeaderText = "اسم الصنف", FillWeight = 30, MinimumWidth = 140, ReadOnly = true });
+        _profitByProductGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(ProductProfitDto.QuantitySold), HeaderText = "كمية مباعة", FillWeight = 12, MinimumWidth = 92, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+        _profitByProductGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(ProductProfitDto.Revenue), HeaderText = "إجمالي الإيراد", FillWeight = 14, MinimumWidth = 102, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+        _profitByProductGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(ProductProfitDto.EstimatedCogs), HeaderText = "تكلفة مقدّرة", FillWeight = 14, MinimumWidth = 102, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+        _profitByProductGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(ProductProfitDto.EstimatedGrossProfit), HeaderText = "ربح مقدّر", FillWeight = 14, MinimumWidth = 96, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
     }
 
     private void ConfigureStockFromMovementsColumns()
@@ -887,7 +1060,11 @@ public partial class MainForm
     {
         _reportPeriodBanner.Font = UiFontSection;
         _reportPeriodBanner.RightToLeft = RightToLeft.Yes;
-        foreach (var l in new[] { _kpiNetSalesVal, _kpiInvoicesVal, _kpiAvgTicketVal, _kpiEstProfitVal, _kpiStockValueVal, _kpiLowStockVal })
+        foreach (var l in new[]
+                 {
+                     _kpiNetSalesVal, _kpiInvoicesVal, _kpiAvgTicketVal, _kpiEstProfitVal, _kpiStockValueVal, _kpiLowStockVal,
+                     _profitKpiRevenueVal, _profitKpiCogsVal, _profitKpiProfitVal
+                 })
             l.Font = new Font("Segoe UI", 16.5f, FontStyle.Bold, GraphicsUnit.Point);
     }
 }
