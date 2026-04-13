@@ -40,9 +40,9 @@ public partial class MainForm
         _kpiEstProfitVal.Text = report.EstimatedGrossProfit.ToString("n2", ReportsCulture);
         _kpiStockValueVal.Text = report.InventoryValue.ToString("n2", ReportsCulture);
         _kpiLowStockVal.Text = report.LowStockCount.ToString("n0", ReportsCulture);
-        _reportMetricsFootnote.Text =
-            $"الإجمالي {report.GrossSales.ToString("n2", ReportsCulture)}  ·  الخصومات {report.TotalDiscounts.ToString("n2", ReportsCulture)}  ·  تكلفة البضاعة المقدرة {report.EstimatedCogs.ToString("n2", ReportsCulture)}  ·  " +
-            "تُشتق تكلفة البضاعة من متوسط تكلفة الشراء المرجح المسجّل من المستودع الرئيسي (تقدير فقط).";
+        _overviewGrossVal.Text = report.GrossSales.ToString("n2", ReportsCulture);
+        _overviewDiscountsVal.Text = report.TotalDiscounts.ToString("n2", ReportsCulture);
+        _overviewCogsVal.Text = report.EstimatedCogs.ToString("n2", ReportsCulture);
 
         _salesByWarehouseGrid.DataSource = byWh;
         _topProductsGrid.DataSource = report.TopProducts;
@@ -448,8 +448,8 @@ public partial class MainForm
 
         var kpiFlow = new FlowLayoutPanel
         {
-            Dock = DockStyle.Top,
-            Height = 124,
+            Dock = DockStyle.Fill,
+            Height = 132,
             WrapContents = true,
             AutoScroll = false,
             Padding = new Padding(14, 8, 14, 10),
@@ -465,133 +465,109 @@ public partial class MainForm
         kpiFlow.Controls.Add(BuildAnalyticsKpiCard("أصناف منخفضة المخزون", _kpiLowStockVal, Color.FromArgb(192, 57, 43), true));
 
         _reportMetricsFootnote.Text =
-            "يُحسب الهامش بمتوسط تكلفة الشراء المرجح في المستودع الرئيسي لكل منتج (تقدير). الخصومات تُنقص صافي المبيعات. قارن الفروع في الجدول، ثم راجع الأكثر مبيعاً والبطيئة الحركة والتحويلات.";
-        _reportMetricsFootnote.Height = 52;
-        _reportMetricsFootnote.Padding = new Padding(18, 10, 18, 10);
+            "يُحسب الهامش بمتوسط تكلفة الشراء المرجح في المستودع الرئيسي لكل منتج (تقدير). الخصومات تُنقص صافي المبيعات. الأرقام أعلاه (الإجمالي / الخصومات / تكلفة البضاعة) تُحدَّث مع الفترة والمستودع. قارن الفروع في الجدول، ثم راجع الأكثر مبيعاً والبطيئة الحركة والتحويلات.";
 
-        var branchPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(18, 4, 18, 12), RightToLeft = RightToLeft.Yes };
-        var branchTitle = new Label
+        var overviewDetailFlow = new FlowLayoutPanel
         {
-            Text = "١ · مقارنة المبيعات · كل المستودعات",
-            Dock = DockStyle.Top,
-            Height = 30,
-            Font = UiFontSection,
-            ForeColor = UiTextPrimary,
-            TextAlign = ContentAlignment.TopRight
+            Dock = DockStyle.Fill,
+            Height = 118,
+            WrapContents = true,
+            AutoScroll = false,
+            Padding = new Padding(14, 6, 14, 8),
+            BackColor = Color.FromArgb(245, 247, 250),
+            RightToLeft = RightToLeft.Yes,
+            FlowDirection = FlowDirection.RightToLeft
         };
-        StyleReportGrid(_salesByWarehouseGrid);
+        overviewDetailFlow.Controls.Add(BuildAnalyticsKpiCard("الإجمالي قبل الخصم", _overviewGrossVal, Color.FromArgb(52, 73, 94), true));
+        overviewDetailFlow.Controls.Add(BuildAnalyticsKpiCard("الخصومات", _overviewDiscountsVal, Color.FromArgb(192, 57, 43), true));
+        overviewDetailFlow.Controls.Add(BuildAnalyticsKpiCard("تكلفة البضاعة المقدرة", _overviewCogsVal, Color.FromArgb(230, 126, 34), true));
+
+        ApplyProfitModuleGridChrome(_salesByWarehouseGrid);
+        ApplyProfitModuleGridChrome(_topProductsGrid);
+        ApplyProfitModuleGridChrome(_slowMovingGrid);
+        ApplyProfitModuleGridChrome(_reportLowStockGrid);
+        ApplyProfitModuleGridChrome(_transferReportGrid);
+        ApplyProfitModuleGridChrome(_warehouseInventoryGrid);
         ConfigureSalesByWarehouseReportColumns();
-        branchPanel.Controls.Add(_salesByWarehouseGrid);
-        branchPanel.Controls.Add(branchTitle);
-
-        var summaryBlock = new Panel { Dock = DockStyle.Top, Height = 428, RightToLeft = RightToLeft.Yes };
-        _reportPeriodBanner.Dock = DockStyle.Top;
-        kpiFlow.Dock = DockStyle.Top;
-        _reportMetricsFootnote.Dock = DockStyle.Top;
-        branchPanel.Dock = DockStyle.Fill;
-        summaryBlock.Controls.Add(branchPanel);
-        summaryBlock.Controls.Add(_reportMetricsFootnote);
-        summaryBlock.Controls.Add(kpiFlow);
-        summaryBlock.Controls.Add(_reportPeriodBanner);
-
-        var topProductsContainer = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12), RightToLeft = RightToLeft.Yes };
-        var topTitle = new Label
-        {
-            Text = "٢ · الأكثر مبيعاً (المستودع المحدد)",
-            Dock = DockStyle.Top,
-            Height = 28,
-            Font = UiFontSection,
-            ForeColor = UiTextPrimary,
-            TextAlign = ContentAlignment.TopRight
-        };
-        StyleReportGrid(_topProductsGrid);
         ConfigureTopProductsReportColumns();
-        topProductsContainer.Controls.Add(_topProductsGrid);
-        topProductsContainer.Controls.Add(topTitle);
-
-        var slowPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12), RightToLeft = RightToLeft.Yes };
-        var slowTitle = new Label
-        {
-            Text = "٣ · بطيئة الحركة · أعد الطلب أو انقل المخزون (رصيد ≥ 1، مبيعات < 1 في المستودع المحدد خلال الفترة)",
-            Dock = DockStyle.Top,
-            Height = 28,
-            Font = UiFontSection,
-            ForeColor = UiTextPrimary,
-            TextAlign = ContentAlignment.TopRight
-        };
-        StyleReportGrid(_slowMovingGrid);
         ConfigureSlowMoversReportColumns();
-        slowPanel.Controls.Add(_slowMovingGrid);
-        slowPanel.Controls.Add(slowTitle);
-
-        var midSplit = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, RightToLeft = RightToLeft.Yes };
-        ApplyInitialSplitterDistance(midSplit, 380);
-        midSplit.Panel1.Controls.Add(topProductsContainer);
-        midSplit.Panel2.Controls.Add(slowPanel);
-
-        var lowStockPanel = new Panel { Dock = DockStyle.Top, Height = 220, Padding = new Padding(12, 4, 12, 8), RightToLeft = RightToLeft.Yes };
-        var lowTitle = new Label
-        {
-            Text = "٤ · مراقبة إعادة الطلب · أصناف عند الحد أو أقل (المستودع المحدد)",
-            Dock = DockStyle.Top,
-            Height = 28,
-            Font = UiFontSection,
-            ForeColor = UiTextPrimary,
-            TextAlign = ContentAlignment.TopRight
-        };
-        StyleReportGrid(_reportLowStockGrid);
         ConfigureReportLowStockColumns();
-        lowStockPanel.Controls.Add(_reportLowStockGrid);
-        lowStockPanel.Controls.Add(lowTitle);
-
-        var transferPanel = new Panel { Dock = DockStyle.Top, Height = 220, Padding = new Padding(12, 4, 12, 8), RightToLeft = RightToLeft.Yes };
-        var xferTitle = new Label
-        {
-            Text = "٥ · التحويلات · وارد أو صادر للمستودع المحدد خلال الفترة",
-            Dock = DockStyle.Top,
-            Height = 28,
-            Font = UiFontSection,
-            ForeColor = UiTextPrimary,
-            TextAlign = ContentAlignment.TopRight
-        };
-        StyleReportGrid(_transferReportGrid);
         ConfigureTransferReportColumns(_transferReportGrid);
-        transferPanel.Controls.Add(_transferReportGrid);
-        transferPanel.Controls.Add(xferTitle);
-
-        var warehouseInventoryContainer = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 4, 12, 12), RightToLeft = RightToLeft.Yes };
-        var warehouseInvTitle = new Label
-        {
-            Text = "٦ · أرصدة المخزون (من إجمالي حركات المخزون) · غير الصفر فقط",
-            Dock = DockStyle.Top,
-            Height = 28,
-            Font = UiFontSection,
-            ForeColor = UiTextPrimary,
-            TextAlign = ContentAlignment.TopRight
-        };
-        StyleReportGrid(_warehouseInventoryGrid);
         ConfigureWarehouseInventorySnapshotColumns();
-        warehouseInventoryContainer.Controls.Add(_warehouseInventoryGrid);
-        warehouseInventoryContainer.Controls.Add(warehouseInvTitle);
 
-        var detailStack = new Panel { Dock = DockStyle.Fill, RightToLeft = RightToLeft.Yes };
-        detailStack.Controls.Add(warehouseInventoryContainer);
-        detailStack.Controls.Add(transferPanel);
-        detailStack.Controls.Add(lowStockPanel);
+        var branchSection = BuildReportModuleGridSection("١ · مقارنة المبيعات · كل المستودعات", _salesByWarehouseGrid, new Padding(0, 0, 0, 12));
+        var topSection = BuildReportModuleGridSection("٢ · الأكثر مبيعاً (المستودع المحدد)", _topProductsGrid, new Padding(0, 0, 0, 12));
+        var slowSection = BuildReportModuleGridSection(
+            "٣ · بطيئة الحركة · أعد الطلب أو انقل المخزون (رصيد ≥ 1، مبيعات < 1 في المستودع المحدد خلال الفترة)",
+            _slowMovingGrid,
+            new Padding(0, 0, 0, 12));
+        var lowStockSection = BuildReportModuleGridSection("٤ · مراقبة إعادة الطلب · أصناف عند الحد أو أقل (المستودع المحدد)", _reportLowStockGrid, new Padding(0, 0, 0, 12));
+        var transferSection = BuildReportModuleGridSection("٥ · التحويلات · وارد أو صادر للمستودع المحدد خلال الفترة", _transferReportGrid, new Padding(0, 0, 0, 12));
+        var warehouseInvSection = BuildReportModuleGridSection("٦ · أرصدة المخزون (من إجمالي حركات المخزون) · غير الصفر فقط", _warehouseInventoryGrid, Padding.Empty);
 
-        var innerVertical = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, RightToLeft = RightToLeft.Yes };
-        ApplyInitialSplitterDistance(innerVertical, 380);
-        innerVertical.Panel1.Controls.Add(midSplit);
-        innerVertical.Panel2.Controls.Add(detailStack);
+        var overviewScrollHost = new Panel
+        {
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            BackColor = Color.FromArgb(245, 247, 250),
+            RightToLeft = RightToLeft.Yes
+        };
+        var overviewLayout = new TableLayoutPanel
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Dock = DockStyle.Top,
+            ColumnCount = 1,
+            RowCount = 10,
+            RightToLeft = RightToLeft.Yes,
+            Padding = new Padding(0, 0, 0, 16),
+            BackColor = Color.Transparent
+        };
+        overviewLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52f));
+        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 132f));
+        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 126f));
+        overviewLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 340f));
+        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 320f));
+        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 320f));
+        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 268f));
+        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 268f));
+        overviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 340f));
 
-        var outer = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, RightToLeft = RightToLeft.Yes };
-        ApplyInitialSplitterDistance(outer, 448);
-        outer.Panel1.Controls.Add(summaryBlock);
-        outer.Panel2.Controls.Add(innerVertical);
+        void SyncOverviewScrollLayout(object? _, EventArgs __)
+        {
+            var innerW = overviewScrollHost.DisplayRectangle.Width;
+            var w = Math.Max(320, innerW);
+            overviewLayout.Width = w;
+            _reportMetricsFootnote.MaximumSize = new Size(Math.Max(200, w - 24), 0);
+        }
 
-        var overviewPanel = new Panel { RightToLeft = RightToLeft.Yes };
-        outer.Dock = DockStyle.Fill;
-        overviewPanel.Controls.Add(outer);
+        overviewScrollHost.HandleCreated += SyncOverviewScrollLayout;
+        overviewScrollHost.Resize += SyncOverviewScrollLayout;
+
+        var bannerHost = new Panel { Dock = DockStyle.Fill, Padding = new Padding(14, 6, 14, 4), BackColor = Color.FromArgb(245, 247, 250), RightToLeft = RightToLeft.Yes };
+        _reportPeriodBanner.Dock = DockStyle.Fill;
+        bannerHost.Controls.Add(_reportPeriodBanner);
+
+        kpiFlow.Dock = DockStyle.Fill;
+        _reportMetricsFootnote.Dock = DockStyle.Fill;
+
+        overviewLayout.Controls.Add(bannerHost, 0, 0);
+        overviewLayout.Controls.Add(kpiFlow, 0, 1);
+        overviewLayout.Controls.Add(overviewDetailFlow, 0, 2);
+        overviewLayout.Controls.Add(_reportMetricsFootnote, 0, 3);
+        overviewLayout.Controls.Add(branchSection, 0, 4);
+        overviewLayout.Controls.Add(topSection, 0, 5);
+        overviewLayout.Controls.Add(slowSection, 0, 6);
+        overviewLayout.Controls.Add(lowStockSection, 0, 7);
+        overviewLayout.Controls.Add(transferSection, 0, 8);
+        overviewLayout.Controls.Add(warehouseInvSection, 0, 9);
+
+        overviewScrollHost.Controls.Add(overviewLayout);
+
+        var overviewPanel = new Panel { RightToLeft = RightToLeft.Yes, BackColor = Color.FromArgb(245, 247, 250) };
+        overviewPanel.Controls.Add(overviewScrollHost);
 
         var profitPanel = new Panel { RightToLeft = RightToLeft.Yes, Padding = new Padding(14, 10, 14, 12), BackColor = Color.FromArgb(245, 247, 250) };
         // Scroll the whole profitability column: KPI + filter + both grids need more vertical space than the tab often has.
@@ -617,7 +593,8 @@ public partial class MainForm
         profitLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         profitLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 126f));
         profitLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        profitLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 560f));
+        // Stacked grids (no split): height comes from content; outer profitScrollHost scrolls when needed.
+        profitLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         void SyncProfitScrollLayout(object? _, EventArgs __)
         {
@@ -715,94 +692,156 @@ public partial class MainForm
         ConfigureProfitByInvoiceColumns();
         ConfigureProfitByProductColumns();
 
-        var invoiceSection = new Panel
-        {
-            Dock = DockStyle.Fill,
-            Padding = new Padding(12, 10, 12, 12),
-            BackColor = Color.White,
-            BorderStyle = BorderStyle.FixedSingle,
-            RightToLeft = RightToLeft.Yes,
-            Margin = new Padding(0, 0, 0, 0)
-        };
-        var invoiceSectionTitle = new Label
-        {
-            Text = "١ · حسب الفاتورة",
-            Dock = DockStyle.Top,
-            Height = 30,
-            Font = UiFontSection,
-            ForeColor = UiTextPrimary,
-            TextAlign = ContentAlignment.TopRight,
-            RightToLeft = RightToLeft.Yes,
-            Padding = new Padding(0, 0, 0, 8),
-            UseCompatibleTextRendering = false
-        };
-        _profitByInvoiceGrid.Dock = DockStyle.Fill;
-        invoiceSection.Controls.Add(invoiceSectionTitle);
-        invoiceSection.Controls.Add(_profitByInvoiceGrid);
+        var invoiceSection = BuildReportModuleGridSection("١ · حسب الفاتورة", _profitByInvoiceGrid, new Padding(0, 0, 0, 14));
+        var productSection = BuildReportModuleGridSection("٢ · تجميع حسب الصنف", _profitByProductGrid, Padding.Empty);
 
-        var productSection = new Panel
+        // Fixed row heights give each grid enough vertical room for headers + several rows; more rows scroll inside the grid.
+        var profitGridsStack = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
-            Padding = new Padding(12, 10, 12, 12),
-            BackColor = Color.White,
-            BorderStyle = BorderStyle.FixedSingle,
-            RightToLeft = RightToLeft.Yes
-        };
-        var productSectionTitle = new Label
-        {
-            Text = "٢ · تجميع حسب الصنف",
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Dock = DockStyle.Top,
-            Height = 30,
-            Font = UiFontSection,
-            ForeColor = UiTextPrimary,
-            TextAlign = ContentAlignment.TopRight,
+            ColumnCount = 1,
+            RowCount = 2,
             RightToLeft = RightToLeft.Yes,
-            Padding = new Padding(0, 0, 0, 8),
-            UseCompatibleTextRendering = false
+            BackColor = Color.Transparent
         };
-        _profitByProductGrid.Dock = DockStyle.Fill;
-        productSection.Controls.Add(productSectionTitle);
-        productSection.Controls.Add(_profitByProductGrid);
-
-        var profitSplit = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, RightToLeft = RightToLeft.Yes };
-        // Do not set Panel*MinSize here: the control often has no real height yet, and WinForms throws when the new mins exceed SplitterDistance.
-        // ApplyInitialSplitterDistance keeps mins at 25 until the client size can honor these targets, then applies them safely.
-        ApplyInitialSplitterDistance(profitSplit, 340, 200, 200);
-        profitSplit.Panel1.Controls.Add(invoiceSection);
-        profitSplit.Panel2.Controls.Add(productSection);
+        profitGridsStack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        profitGridsStack.RowStyles.Add(new RowStyle(SizeType.Absolute, 360f));
+        profitGridsStack.RowStyles.Add(new RowStyle(SizeType.Absolute, 360f));
+        profitGridsStack.Controls.Add(invoiceSection, 0, 0);
+        profitGridsStack.Controls.Add(productSection, 0, 1);
 
         profitLayout.Controls.Add(profitTitle, 0, 0);
         profitLayout.Controls.Add(profitSubtitle, 0, 1);
         profitLayout.Controls.Add(profitKpiFlow, 0, 2);
         profitLayout.Controls.Add(profitFilterBar, 0, 3);
-        profitLayout.Controls.Add(profitSplit, 0, 4);
+        profitLayout.Controls.Add(profitGridsStack, 0, 4);
         profitScrollHost.Controls.Add(profitLayout);
         profitPanel.Controls.Add(profitScrollHost);
 
-        var stockPanel = new Panel { RightToLeft = RightToLeft.Yes };
-        var stockHost = new Panel { Dock = DockStyle.Fill, RightToLeft = RightToLeft.Yes };
-        var stockFilter = new FlowLayoutPanel
+        var stockPanel = new Panel { RightToLeft = RightToLeft.Yes, BackColor = Color.FromArgb(245, 247, 250) };
+        var stockScrollHost = new Panel
         {
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            BackColor = Color.FromArgb(245, 247, 250),
+            RightToLeft = RightToLeft.Yes
+        };
+        var stockLayout = new TableLayoutPanel
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Dock = DockStyle.Top,
-            Height = 40,
-            FlowDirection = FlowDirection.RightToLeft,
-            Padding = new Padding(8, 4, 8, 4)
+            ColumnCount = 1,
+            RowCount = 5,
+            RightToLeft = RightToLeft.Yes,
+            Padding = new Padding(14, 10, 14, 16),
+            BackColor = Color.Transparent
+        };
+        stockLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        stockLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        stockLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        stockLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        stockLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 360f));
+        stockLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 360f));
+
+        var stockTitle = new Label
+        {
+            Text = "المخزون وحركة الصنف",
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            Font = UiFontSection,
+            ForeColor = UiTextPrimary,
+            TextAlign = ContentAlignment.TopRight,
+            RightToLeft = RightToLeft.Yes,
+            Margin = new Padding(0, 0, 0, 4),
+            UseCompatibleTextRendering = false
+        };
+        var stockSubtitle = new Label
+        {
+            Text = "الجدول الأول يعرض أرصدة الأصناف مجمّعة من حركات المخزون حسب المستودع المحدد في شريط التقرير. الجدول الثاني يعرض حركات الصنف الذي تختاره أدناه خلال نفس الفترة.",
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            Font = new Font(UiFont, FontStyle.Regular),
+            ForeColor = UiTextSecondary,
+            TextAlign = ContentAlignment.TopRight,
+            RightToLeft = RightToLeft.Yes,
+            Margin = new Padding(0, 0, 0, 10),
+            MaximumSize = new Size(980, 0),
+            UseCompatibleTextRendering = false
+        };
+
+        var stockFilterBar = new Panel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            MinimumSize = new Size(0, 52),
+            BackColor = Color.White,
+            Padding = new Padding(14, 12, 14, 12),
+            Margin = new Padding(0, 0, 0, 12),
+            BorderStyle = BorderStyle.FixedSingle,
+            RightToLeft = RightToLeft.Yes
         };
         _reportHistoryProductCombo.RightToLeft = RightToLeft.Yes;
-        stockFilter.Controls.Add(_reportHistoryProductCombo);
-        stockFilter.Controls.Add(new Label { Text = "الصنف لعرض الحركة:", AutoSize = true, Margin = new Padding(12, 8, 0, 0), TextAlign = ContentAlignment.MiddleRight, Font = UiFontCaption, RightToLeft = RightToLeft.Yes });
-        StyleReportGrid(_stockFromMovementsGrid);
-        StyleReportGrid(_stockHistoryGrid);
+        _reportHistoryProductCombo.Width = 320;
+        var stockFilterInner = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = true,
+            AutoSize = true,
+            Padding = Padding.Empty,
+            BackColor = Color.White,
+            RightToLeft = RightToLeft.Yes
+        };
+        stockFilterInner.Controls.Add(_reportHistoryProductCombo);
+        stockFilterInner.Controls.Add(new Label
+        {
+            Text = "الصنف لعرض الحركة في الجدول الثاني:",
+            AutoSize = true,
+            Margin = new Padding(12, 8, 0, 0),
+            TextAlign = ContentAlignment.MiddleRight,
+            Font = UiFontCaption,
+            ForeColor = UiTextPrimary,
+            RightToLeft = RightToLeft.Yes,
+            UseCompatibleTextRendering = false
+        });
+        stockFilterBar.Controls.Add(stockFilterInner);
+
+        ApplyProfitModuleGridChrome(_stockFromMovementsGrid);
+        ApplyProfitModuleGridChrome(_stockHistoryGrid);
         ConfigureStockFromMovementsColumns();
         ConfigureStockHistoryColumns();
-        var stockSplit = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, RightToLeft = RightToLeft.Yes };
-        ApplyInitialSplitterDistance(stockSplit, 300);
-        stockSplit.Panel1.Controls.Add(_stockFromMovementsGrid);
-        stockSplit.Panel2.Controls.Add(_stockHistoryGrid);
-        stockHost.Controls.Add(stockSplit);
-        stockHost.Controls.Add(stockFilter);
-        stockHost.Dock = DockStyle.Fill;
-        stockPanel.Controls.Add(stockHost);
+
+        var stockMovementsSection = BuildReportModuleGridSection(
+            "١ · أرصدة الأصناف من حركات المخزون (حسب المستودع المحدد أعلى التقرير)",
+            _stockFromMovementsGrid,
+            new Padding(0, 0, 0, 12));
+        var stockHistorySection = BuildReportModuleGridSection(
+            "٢ · تفصيل حركة الصنف المختار (الفترة من مرشحات التقرير)",
+            _stockHistoryGrid,
+            Padding.Empty);
+
+        void SyncStockScrollLayout(object? _, EventArgs __)
+        {
+            var innerW = stockScrollHost.DisplayRectangle.Width;
+            var w = Math.Max(320, innerW);
+            stockLayout.Width = w;
+            stockSubtitle.MaximumSize = new Size(Math.Max(200, w - 28), 0);
+        }
+
+        stockScrollHost.HandleCreated += SyncStockScrollLayout;
+        stockScrollHost.Resize += SyncStockScrollLayout;
+
+        stockLayout.Controls.Add(stockTitle, 0, 0);
+        stockLayout.Controls.Add(stockSubtitle, 0, 1);
+        stockLayout.Controls.Add(stockFilterBar, 0, 2);
+        stockLayout.Controls.Add(stockMovementsSection, 0, 3);
+        stockLayout.Controls.Add(stockHistorySection, 0, 4);
+        stockScrollHost.Controls.Add(stockLayout);
+        stockPanel.Controls.Add(stockScrollHost);
 
         var xferPanel = new Panel { RightToLeft = RightToLeft.Yes };
         StyleReportGrid(_transferFullGrid);
@@ -953,14 +992,56 @@ public partial class MainForm
         grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(TransferLedgerRowDto.Notes), HeaderText = "ملاحظات", FillWeight = 22, ReadOnly = true });
     }
 
+    /// <summary>Report block: title bar + grid (stable layout; avoids title/header overlap).</summary>
+    private TableLayoutPanel BuildReportModuleGridSection(string sectionTitle, DataGridView grid, Padding outerMargin)
+    {
+        var wrap = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(12, 12, 12, 12),
+            Margin = outerMargin,
+            BackColor = Color.White,
+            BorderStyle = BorderStyle.FixedSingle,
+            RightToLeft = RightToLeft.Yes
+        };
+        wrap.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        wrap.RowStyles.Add(new RowStyle(SizeType.Absolute, 48f));
+        wrap.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+        var titleBar = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.FromArgb(244, 246, 250),
+            Padding = new Padding(12, 6, 12, 6)
+        };
+        titleBar.Controls.Add(new Label
+        {
+            Text = sectionTitle,
+            Dock = DockStyle.Fill,
+            Font = UiFontSection,
+            ForeColor = UiTextPrimary,
+            TextAlign = ContentAlignment.MiddleRight,
+            RightToLeft = RightToLeft.Yes,
+            AutoSize = false,
+            UseCompatibleTextRendering = false
+        });
+
+        grid.Dock = DockStyle.Fill;
+        wrap.Controls.Add(titleBar, 0, 0);
+        wrap.Controls.Add(grid, 0, 1);
+        return wrap;
+    }
+
     private static void ApplyProfitModuleGridChrome(DataGridView g)
     {
         StyleReportGrid(g);
         // Taller headers + padding so wrapped Arabic column titles are not clipped vertically.
-        g.ColumnHeadersHeight = 58;
+        g.ColumnHeadersHeight = 64;
         g.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
         g.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.True;
-        g.ColumnHeadersDefaultCellStyle.Padding = new Padding(10, 12, 10, 12);
+        g.ColumnHeadersDefaultCellStyle.Padding = new Padding(10, 14, 10, 14);
         g.RowTemplate.Height = 40;
         g.DefaultCellStyle.Padding = new Padding(12, 8, 12, 8);
     }
@@ -970,7 +1051,7 @@ public partial class MainForm
         _profitByInvoiceGrid.AutoGenerateColumns = false;
         _profitByInvoiceGrid.Columns.Clear();
         _profitByInvoiceGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        _profitByInvoiceGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InvoiceProfitDto.InvoiceNumber), HeaderText = "رقم الفاتورة", FillWeight = 16, MinimumWidth = 108, ReadOnly = true });
+        _profitByInvoiceGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InvoiceProfitDto.InvoiceNumber), HeaderText = "رقم الفاتورة", FillWeight = 18, MinimumWidth = 168, ReadOnly = true });
         _profitByInvoiceGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InvoiceProfitDto.InvoiceDateUtc), HeaderText = "الوقت (UTC)", FillWeight = 14, MinimumWidth = 128, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm" } });
         _profitByInvoiceGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InvoiceProfitDto.WarehouseName), HeaderText = "الفرع", FillWeight = 12, MinimumWidth = 88, ReadOnly = true });
         _profitByInvoiceGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InvoiceProfitDto.NetRevenue), HeaderText = "صافي الإيراد", FillWeight = 13, MinimumWidth = 102, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
@@ -1063,6 +1144,7 @@ public partial class MainForm
         foreach (var l in new[]
                  {
                      _kpiNetSalesVal, _kpiInvoicesVal, _kpiAvgTicketVal, _kpiEstProfitVal, _kpiStockValueVal, _kpiLowStockVal,
+                     _overviewGrossVal, _overviewDiscountsVal, _overviewCogsVal,
                      _profitKpiRevenueVal, _profitKpiCogsVal, _profitKpiProfitVal
                  })
             l.Font = new Font("Segoe UI", 16.5f, FontStyle.Bold, GraphicsUnit.Point);

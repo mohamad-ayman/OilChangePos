@@ -70,13 +70,16 @@ public partial class MainForm : Form
     private readonly Label _reportMetricsFootnote = new()
     {
         Dock = DockStyle.Top,
-        Height = 44,
+        AutoSize = true,
         ForeColor = UiTextSecondary,
         BackColor = Color.FromArgb(248, 249, 250),
-        TextAlign = ContentAlignment.MiddleRight,
-        Padding = new Padding(16, 8, 16, 8),
-        Font = UiFont,
-        RightToLeft = RightToLeft.Yes
+        TextAlign = ContentAlignment.TopRight,
+        Padding = new Padding(16, 10, 16, 12),
+        Margin = new Padding(0, 0, 0, 8),
+        Font = new Font(UiFont, FontStyle.Regular),
+        RightToLeft = RightToLeft.Yes,
+        BorderStyle = BorderStyle.FixedSingle,
+        UseCompatibleTextRendering = false
     };
     private readonly Label _kpiNetSalesVal = new() { Text = "—", AutoSize = false, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.No };
     private readonly Label _kpiInvoicesVal = new() { Text = "—", AutoSize = false, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.No };
@@ -84,6 +87,10 @@ public partial class MainForm : Form
     private readonly Label _kpiEstProfitVal = new() { Text = "—", AutoSize = false, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.No };
     private readonly Label _kpiStockValueVal = new() { Text = "—", AutoSize = false, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.No };
     private readonly Label _kpiLowStockVal = new() { Text = "—", AutoSize = false, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.No };
+    /// <summary>ملخص الأداء — تفصيل الإجمالي / الخصومات / تكلفة البضاعة (يُحدَّث في <see cref="RefreshReportsAsync"/>).</summary>
+    private readonly Label _overviewGrossVal = new() { Text = "—", AutoSize = false, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.No };
+    private readonly Label _overviewDiscountsVal = new() { Text = "—", AutoSize = false, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.No };
+    private readonly Label _overviewCogsVal = new() { Text = "—", AutoSize = false, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.No };
     // Branch POS — KPI labels
     private readonly Label _kpiBranchSalesVal = new() { AutoSize = false, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.Yes };
     private readonly Label _kpiBranchInvVal   = new() { AutoSize = false, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.Yes };
@@ -660,9 +667,11 @@ public partial class MainForm : Form
                 return;
 
             var maxDist = usable - panel2MinSize;
-            var dist = maxDist < panel1MinSize
-                ? panel1MinSize
-                : Math.Clamp(preferredDistance, panel1MinSize, maxDist);
+            // Valid splitter range is [panel1MinSize, maxDist]; if maxDist < panel1MinSize (tight layout),
+            // pick the largest distance that still fits instead of forcing panel1MinSize (which throws).
+            var lo = Math.Min(panel1MinSize, maxDist);
+            var hi = Math.Max(panel1MinSize, maxDist);
+            var dist = Math.Clamp(preferredDistance, lo, hi);
 
             try
             {
