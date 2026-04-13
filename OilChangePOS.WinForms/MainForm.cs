@@ -85,6 +85,11 @@ public class MainForm : Form
     private readonly Label _kpiEstProfitVal = new() { Text = "—", AutoSize = false, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.No };
     private readonly Label _kpiStockValueVal = new() { Text = "—", AutoSize = false, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.No };
     private readonly Label _kpiLowStockVal = new() { Text = "—", AutoSize = false, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.No };
+    // Branch POS — KPI labels
+    private readonly Label _kpiBranchSalesVal = new() { AutoSize = false, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.Yes };
+    private readonly Label _kpiBranchInvVal   = new() { AutoSize = false, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.Yes };
+    private readonly Label _kpiBranchLowVal   = new() { AutoSize = false, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.Yes };
+    private readonly Label _kpiBranchNameVal  = new() { AutoSize = false, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.Yes };
     private readonly ComboBox _reportWarehouseCombo = new() { Width = 260, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly DateTimePicker _reportFromPicker = new() { Width = 150 };
     private readonly DateTimePicker _reportToPicker = new() { Width = 150 };
@@ -151,6 +156,13 @@ public class MainForm : Form
     private readonly ComboBox _posWarehouseCombo = new() { Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox _posCustomerCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox _inventoryWarehouseCombo = new() { Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly Button _inventoryResetBranchPriceBtn = new()
+    {
+        Text = "إعادة السعر للقائمة (الصف المحدد)",
+        AutoSize = true,
+        Height = 32,
+        RightToLeft = RightToLeft.Yes
+    };
     private readonly ComboBox _transferFromWarehouseCombo = new() { Width = 220, DropDownStyle = ComboBoxStyle.DropDownList, RightToLeft = RightToLeft.Yes };
     private readonly ComboBox _transferToWarehouseCombo = new() { Width = 220, DropDownStyle = ComboBoxStyle.DropDownList, RightToLeft = RightToLeft.Yes };
     private readonly ComboBox _transferProductCombo = new() { Width = 400, DropDownStyle = ComboBoxStyle.DropDownList, RightToLeft = RightToLeft.Yes };
@@ -206,6 +218,23 @@ public class MainForm : Form
         Maximum = 1000000,
         Tag = MainWarehouseUiLabelTag
     };
+    private readonly ComboBox _mwBranchPriceWarehouseCombo = new()
+    {
+        Width = 200,
+        DropDownStyle = ComboBoxStyle.DropDownList,
+        Tag = MainWarehouseUiLabelTag,
+        RightToLeft = RightToLeft.Yes
+    };
+    private readonly NumericUpDown _mwBranchRetailOverride = new()
+    {
+        Width = 118,
+        DecimalPlaces = 2,
+        Maximum = 1000000,
+        Tag = MainWarehouseUiLabelTag
+    };
+    private Button _mwBranchPriceSaveBtn = null!;
+    private Button _mwBranchPriceResetBtn = null!;
+    private bool _mwBranchPriceEventsAttached;
     private readonly DateTimePicker _mwProductionDate = new()
     {
         Width = 142,
@@ -237,7 +266,7 @@ public class MainForm : Form
         Font = UiFontCaption,
         Text = "المستودع الرئيسي: -"
     };
-    private readonly NumericUpDown _posAddQty = new() { DecimalPlaces = 3, Width = 130, Value = 1, Maximum = 100000 };
+    private readonly NumericUpDown _posAddQty = new() { DecimalPlaces = 3, Width = 130, Minimum = 0.001m, Value = 1, Maximum = 100000 };
     private readonly NumericUpDown _posDiscount = new() { DecimalPlaces = 2, Width = 120, Maximum = 100000 };
     private readonly NumericUpDown _oilChangeCustomerId = new() { Minimum = 1, Maximum = 999_999, Width = 72 };
     private readonly NumericUpDown _oilChangeCarId = new() { Minimum = 1, Maximum = 999_999, Width = 72 };
@@ -462,7 +491,7 @@ public class MainForm : Form
         _inventoryShowZeroStockCheck.Checked = true;
         _inventoryAdminGroup.Visible = false;
         _inventoryAddProductGroup.Visible = false;
-        _inventoryTopPanel.Height = 118;
+        _inventoryTopPanel.Height = 268;
         _mainTabs.SelectedIndex = 0;
         ApplySidebarNavHighlight(_mainTabs.SelectedIndex);
     }
@@ -757,96 +786,559 @@ public class MainForm : Form
         OnSized(split, EventArgs.Empty);
     }
 
+    private static Panel MakePosCard()
+    {
+        var p = new Panel { BackColor = Color.White };
+        p.Paint += (_, e) =>
+        {
+            using var pen = new Pen(Color.FromArgb(218, 220, 228), 1);
+            e.Graphics.DrawRectangle(pen, 0, 0, p.Width - 1, p.Height - 1);
+        };
+        return p;
+    }
+
+    private static Panel MakePosKpiCard(string caption, Label valueLabel, Color accent)
+    {
+        var card = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.White,
+            Margin = new Padding(0, 0, 8, 0)
+        };
+        card.Paint += (_, e) =>
+        {
+            using var pen = new Pen(Color.FromArgb(218, 220, 228));
+            e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1);
+            using var bar = new SolidBrush(accent);
+            e.Graphics.FillRectangle(bar, 0, 0, 4, card.Height);
+        };
+
+        var capLbl = new Label
+        {
+            Text = caption,
+            Dock = DockStyle.Top,
+            Height = 22,
+            Font = new Font("Segoe UI", 9f),
+            ForeColor = Color.FromArgb(110, 110, 120),
+            TextAlign = ContentAlignment.BottomRight,
+            RightToLeft = RightToLeft.Yes,
+            Padding = new Padding(4, 0, 10, 0)
+        };
+
+        valueLabel.Dock = DockStyle.Fill;
+        valueLabel.Font = new Font("Segoe UI", 16f, FontStyle.Bold);
+        valueLabel.ForeColor = accent;
+        valueLabel.TextAlign = ContentAlignment.MiddleRight;
+        valueLabel.RightToLeft = RightToLeft.Yes;
+        valueLabel.Padding = new Padding(4, 0, 10, 0);
+        valueLabel.Text = "—";
+
+        card.Controls.Add(valueLabel);
+        card.Controls.Add(capLbl);
+        return card;
+    }
+
+    private static Panel WrapInBanner(Label lbl, Color bg)
+    {
+        var p = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = bg,
+            Margin = new Padding(0, 0, 8, 0),
+            Padding = new Padding(12, 6, 12, 6)
+        };
+        lbl.ForeColor = Color.White;
+        lbl.BackColor = Color.Transparent;
+        lbl.TextAlign = ContentAlignment.MiddleRight;
+        lbl.Dock = DockStyle.Fill;
+        p.Controls.Add(lbl);
+        return p;
+    }
+
+    private async Task RefreshDailyKpisAsync()
+    {
+        try
+        {
+            var (whOk, branchId) = await TryResolvePosSaleWarehouseIdAsync();
+            var whName = _posWarehouseCombo.SelectedItem is WarehouseDto w ? w.Name : "—";
+            _kpiBranchNameVal.Text = whName;
+
+            if (!whOk)
+            {
+                _kpiBranchSalesVal.Text = "—";
+                _kpiBranchInvVal.Text = "—";
+                _kpiBranchLowVal.Text = "—";
+                return;
+            }
+
+            var report = await _reportService.GetDailySalesReportForWarehouseAsync(DateTime.UtcNow, branchId);
+            _kpiBranchSalesVal.Text = $"{report.TotalSales:n0} ر.س";
+            _kpiBranchInvVal.Text = report.InvoiceCount.ToString();
+
+            var low = await _inventoryService.GetLowStockAsync(branchId);
+            _kpiBranchLowVal.Text = low.Count.ToString();
+        }
+        catch
+        {
+            /* non-critical */
+        }
+    }
+
     private TabPage BuildPosTab()
     {
-        var tab = new TabPage("البيع");
-        var layoutHost = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(245, 247, 250) };
+        var tab = new TabPage("البيع")
+        {
+            RightToLeft = RightToLeft.Yes,
+            BackColor = Color.FromArgb(245, 247, 250)
+        };
 
-        StyleGrid(_cartGrid);
-        ConfigureCartColumns();
-        _posSearchBox.TextChanged += (_, _) => RenderProductCards();
-        _posDiscount.ValueChanged += (_, _) => RefreshCartSummary();
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(12, 10, 12, 10),
+            BackColor = Color.FromArgb(245, 247, 250)
+        };
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 78));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        var availablePanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(18), BackColor = Color.FromArgb(245, 247, 250) };
-        var availableHeader = new Label { Text = "الأصناف المتاحة", Dock = DockStyle.Top, Height = 34, Font = UiFontSection, ForeColor = UiTextPrimary, TextAlign = ContentAlignment.TopRight, RightToLeft = RightToLeft.Yes };
-        var availableActions = new Panel { Dock = DockStyle.Top, Height = 44 };
-        _mainWarehouseInfoLabel.Left = 830;
-        _mainWarehouseInfoLabel.Top = 12;
-        var branchLabel = new Label { Text = "الفرع (البيع):", Left = 548, Top = 10, Width = 118, Height = 24, Font = UiFontCaption, ForeColor = UiTextPrimary, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.Yes };
-        _posWarehouseCombo.Left = 672;
-        _posWarehouseCombo.Top = 8;
-        _posWarehouseCombo.Height = 28;
-        var searchLabel = new Label { Text = "بحث:", Left = 0, Top = 10, Width = 64, Height = 24, Font = UiFontCaption, ForeColor = UiTextPrimary, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.Yes };
-        _posSearchBox.Left = 66;
-        _posSearchBox.Top = 8;
-        _posSearchBox.Height = 28;
+        var kpiRow = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 4,
+            RowCount = 1,
+            BackColor = Color.FromArgb(245, 247, 250),
+            Margin = new Padding(0, 0, 0, 8)
+        };
+        kpiRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+        kpiRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+        kpiRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+        kpiRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+
+        kpiRow.Controls.Add(MakePosKpiCard("مبيعات اليوم", _kpiBranchSalesVal, Color.FromArgb(39, 174, 96)), 0, 0);
+        kpiRow.Controls.Add(MakePosKpiCard("عدد الفواتير", _kpiBranchInvVal, Color.FromArgb(33, 150, 243)), 1, 0);
+        kpiRow.Controls.Add(MakePosKpiCard("أصناف منخفضة", _kpiBranchLowVal, Color.FromArgb(192, 57, 43)), 2, 0);
+        kpiRow.Controls.Add(MakePosKpiCard("الفرع الحالي", _kpiBranchNameVal, Color.FromArgb(80, 80, 110)), 3, 0);
+
+        var body = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1
+        };
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 360));
+
+        var prodCard = MakePosCard();
+        prodCard.Dock = DockStyle.Fill;
+        prodCard.Margin = new Padding(0, 0, 8, 0);
+
+        var branchBar = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 38,
+            ColumnCount = 4,
+            RowCount = 1,
+            BackColor = Color.White,
+            Padding = new Padding(10, 4, 10, 4)
+        };
+        branchBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 40));
+        branchBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
+        branchBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        branchBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
+        branchBar.Paint += (_, e) =>
+            e.Graphics.DrawLine(new Pen(Color.FromArgb(224, 224, 224)),
+                0, branchBar.Height - 1, branchBar.Width, branchBar.Height - 1);
+
+        var branchLbl = new Label
+        {
+            Text = "الفرع:",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleRight,
+            Font = UiFontCaption,
+            ForeColor = UiTextSecondary
+        };
+        _posWarehouseCombo.Dock = DockStyle.Fill;
+        _posWarehouseCombo.Font = UiFont;
+        _posWarehouseCombo.Margin = new Padding(4, 2, 0, 2);
+
+        branchBar.Controls.Add(branchLbl, 0, 0);
+        branchBar.Controls.Add(_posWarehouseCombo, 1, 0);
+
+        var toolBar = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 42,
+            ColumnCount = 4,
+            RowCount = 1,
+            BackColor = Color.White,
+            Padding = new Padding(10, 5, 10, 5)
+        };
+        toolBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        toolBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 8));
+        toolBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
+        toolBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
+        toolBar.Paint += (_, e) =>
+            e.Graphics.DrawLine(new Pen(Color.FromArgb(224, 224, 224)),
+                0, toolBar.Height - 1, toolBar.Width, toolBar.Height - 1);
+
+        _categoryPanel.Dock = DockStyle.Fill;
+        _categoryPanel.Height = 32;
+        _categoryPanel.Padding = new Padding(0, 2, 0, 2);
+        _categoryPanel.BackColor = Color.White;
+        toolBar.Controls.Add(_categoryPanel, 0, 0);
+        toolBar.Controls.Add(new Panel { Dock = DockStyle.Fill, BackColor = Color.White }, 1, 0);
+
+        _posSearchBox.Dock = DockStyle.Fill;
         _posSearchBox.Font = UiFont;
-        var qtyLabel = new Label { Text = "الكمية:", Left = 356, Top = 10, Width = 52, Height = 24, Font = UiFontCaption, ForeColor = UiTextPrimary, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.Yes };
-        _posAddQty.Left = 398;
-        _posAddQty.Top = 8;
+        _posSearchBox.PlaceholderText = "بحث عن صنف...";
+        _posSearchBox.Margin = new Padding(0, 2, 0, 2);
+        _posSearchBox.TextChanged += (_, _) => RenderProductCards();
+        toolBar.Controls.Add(_posSearchBox, 2, 0);
+
+        var qtyPanel = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
+        var qtyLbl = new Label
+        {
+            Text = "الكمية",
+            Left = 0, Top = 4, Width = 38, Height = 20,
+            Font = new Font("Segoe UI", 9f),
+            ForeColor = UiTextSecondary,
+            TextAlign = ContentAlignment.MiddleRight
+        };
+        _posAddQty.Left = 40;
+        _posAddQty.Top = 2;
+        _posAddQty.Width = 62;
         _posAddQty.Height = 28;
         _posAddQty.Font = UiFont;
-        availableActions.Controls.Add(searchLabel);
-        availableActions.Controls.Add(_posSearchBox);
-        availableActions.Controls.Add(qtyLabel);
-        availableActions.Controls.Add(_posAddQty);
-        availableActions.Controls.Add(branchLabel);
-        availableActions.Controls.Add(_posWarehouseCombo);
-        availableActions.Controls.Add(_mainWarehouseInfoLabel);
-        availablePanel.Controls.Add(_categoryPanel);
-        availablePanel.Controls.Add(_productCardsPanel);
-        availablePanel.Controls.Add(availableActions);
-        availablePanel.Controls.Add(availableHeader);
-        availablePanel.Controls.Add(_breadcrumbLabel);
-        availablePanel.Controls.Add(_orderTitleLabel);
+        _posAddQty.DecimalPlaces = 3;
+        _posAddQty.Minimum = 0.001m;
+        qtyPanel.Controls.Add(qtyLbl);
+        qtyPanel.Controls.Add(_posAddQty);
+        toolBar.Controls.Add(qtyPanel, 3, 0);
 
-        var cartPanel = new Panel { Dock = DockStyle.Right, Width = 520, Padding = new Padding(16), BackColor = Color.White };
-        var cartHeader = new Label
+        _productCardsPanel.Dock = DockStyle.Fill;
+        _productCardsPanel.AutoScroll = true;
+        _productCardsPanel.WrapContents = true;
+        _productCardsPanel.Padding = new Padding(10, 8, 10, 8);
+        _productCardsPanel.BackColor = Color.FromArgb(247, 248, 250);
+
+        prodCard.Controls.Add(_productCardsPanel);
+        prodCard.Controls.Add(toolBar);
+        prodCard.Controls.Add(branchBar);
+
+        var cartCard = MakePosCard();
+        cartCard.Dock = DockStyle.Fill;
+
+        var cartHeader = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 42,
+            BackColor = Color.White,
+            Padding = new Padding(12, 8, 12, 6)
+        };
+        cartHeader.Paint += (_, e) =>
+            e.Graphics.DrawLine(new Pen(Color.FromArgb(224, 224, 224)),
+                0, cartHeader.Height - 1, cartHeader.Width, cartHeader.Height - 1);
+
+        var cartTitleLbl = new Label
         {
             Text = "سلة الطلب",
-            Dock = DockStyle.Top,
-            Height = 36,
-            Font = UiFontSection,
+            AutoSize = true,
+            Font = new Font("Segoe UI", 12f, FontStyle.Bold),
             ForeColor = UiTextPrimary,
-            TextAlign = ContentAlignment.TopRight,
+            Top = 8,
             RightToLeft = RightToLeft.Yes
         };
-        var cartActions = new Panel { Dock = DockStyle.Top, Height = 52 };
-        var remove = BuildButton("إزالة الصنف", Color.FromArgb(192, 57, 43));
-        remove.Click += (_, _) => RemoveSelectedCartItem();
-        var discountLabel = new Label { Text = "الخصم:", Left = 0, Top = 12, Width = 72, Height = 24, Font = UiFontCaption, ForeColor = UiTextPrimary, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.Yes };
-        _posDiscount.Left = 74;
-        _posDiscount.Top = 10;
-        _posDiscount.Height = 28;
-        _posDiscount.Font = UiFont;
-        remove.Width = 110;
-        remove.Height = 34;
-        remove.Left = 220;
-        remove.Top = 8;
-        cartActions.Controls.Add(discountLabel);
-        cartActions.Controls.Add(_posDiscount);
-        cartActions.Controls.Add(remove);
+        cartTitleLbl.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        cartHeader.Controls.Add(cartTitleLbl);
+        cartHeader.Resize += (_, _) =>
+        {
+            cartTitleLbl.Left = cartHeader.ClientSize.Width - cartTitleLbl.Width - 14;
+            cartTitleLbl.Top = 8;
+        };
 
-        var summaryPanel = BuildSummaryPanel();
-        var submitPanel = BuildSubmitPanel();
-        _cartGrid.RowTemplate.Height = 40;
+        var removeBar = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 36,
+            BackColor = Color.FromArgb(253, 247, 247),
+            Padding = new Padding(10, 5, 10, 5)
+        };
+        removeBar.Paint += (_, e) =>
+            e.Graphics.DrawLine(new Pen(Color.FromArgb(248, 220, 220)),
+                0, removeBar.Height - 1, removeBar.Width, removeBar.Height - 1);
+
+        var removeBtn = new Button
+        {
+            Text = "× إزالة الصنف المحدد",
+            Dock = DockStyle.Fill,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(252, 235, 235),
+            ForeColor = Color.FromArgb(180, 30, 30),
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            Cursor = Cursors.Hand,
+            RightToLeft = RightToLeft.Yes,
+            UseCompatibleTextRendering = false,
+            UseVisualStyleBackColor = false
+        };
+        removeBtn.FlatAppearance.BorderColor = Color.FromArgb(245, 195, 195);
+        removeBtn.FlatAppearance.BorderSize = 1;
+        removeBtn.Click += (_, _) => RemoveSelectedCartItem();
+        removeBar.Controls.Add(removeBtn);
+
+        StyleGrid(_cartGrid);
+        _cartGrid.Dock = DockStyle.Fill;
         _cartGrid.DataSource = _cartBinding;
-        cartPanel.Controls.Add(_cartGrid);
-        cartPanel.Controls.Add(submitPanel);
-        cartPanel.Controls.Add(summaryPanel);
-        cartPanel.Controls.Add(cartActions);
-        cartPanel.Controls.Add(cartHeader);
+        _cartGrid.BackgroundColor = Color.White;
+        _cartGrid.RowTemplate.Height = 40;
+        _cartGrid.Font = new Font("Segoe UI", 10.5f);
+        _cartGrid.DefaultCellStyle.Padding = new Padding(6, 4, 6, 4);
+        _cartGrid.BorderStyle = BorderStyle.None;
+        _cartGrid.GridColor = Color.FromArgb(232, 234, 237);
+        _cartGrid.ColumnHeadersDefaultCellStyle.Padding = new Padding(6, 6, 6, 6);
+        ConfigureCartColumnsFixed();
 
-        layoutHost.Controls.Add(availablePanel);
-        layoutHost.Controls.Add(cartPanel);
-        tab.Controls.Add(layoutHost);
+        var bottomPanel = new Panel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 240,
+            BackColor = Color.White,
+            Padding = new Padding(12, 10, 12, 10)
+        };
+        bottomPanel.Paint += (_, e) =>
+            e.Graphics.DrawLine(new Pen(Color.FromArgb(224, 224, 224)), 0, 0, bottomPanel.Width, 0);
+
+        var custPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 34,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = Color.White,
+            Margin = new Padding(0, 0, 0, 6)
+        };
+        custPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 52));
+        custPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        custPanel.Controls.Add(new Label
+        {
+            Text = "العميل:",
+            Dock = DockStyle.Fill,
+            Font = UiFontCaption,
+            ForeColor = UiTextSecondary,
+            TextAlign = ContentAlignment.MiddleRight
+        }, 0, 0);
+        _posCustomerCombo.Dock = DockStyle.Fill;
+        _posCustomerCombo.Font = UiFont;
+        _posCustomerCombo.Height = 30;
+        custPanel.Controls.Add(_posCustomerCombo, 1, 0);
+
+        var discPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 34,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = Color.White,
+            Margin = new Padding(0, 0, 0, 6)
+        };
+        discPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 52));
+        discPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        discPanel.Controls.Add(new Label
+        {
+            Text = "خصم:",
+            Dock = DockStyle.Fill,
+            Font = UiFontCaption,
+            ForeColor = UiTextSecondary,
+            TextAlign = ContentAlignment.MiddleRight
+        }, 0, 0);
+        _posDiscount.Dock = DockStyle.Fill;
+        _posDiscount.Font = UiFont;
+        _posDiscount.Height = 30;
+        _posDiscount.DecimalPlaces = 2;
+        _posDiscount.Maximum = 100000;
+        _posDiscount.ValueChanged += (_, _) => RefreshCartSummary();
+        discPanel.Controls.Add(_posDiscount, 1, 0);
+
+        var summaryBox = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 72,
+            BackColor = Color.FromArgb(247, 249, 251),
+            Margin = new Padding(0, 0, 0, 8)
+        };
+        summaryBox.Paint += (_, e) =>
+        {
+            using var pen = new Pen(Color.FromArgb(218, 222, 230));
+            e.Graphics.DrawRectangle(pen, 0, 0, summaryBox.Width - 1, summaryBox.Height - 1);
+        };
+
+        var sumTable = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 3,
+            BackColor = Color.Transparent,
+            Padding = new Padding(10, 6, 10, 6)
+        };
+        sumTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55));
+        sumTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
+        sumTable.RowStyles.Add(new RowStyle(SizeType.Percent, 33f));
+        sumTable.RowStyles.Add(new RowStyle(SizeType.Percent, 33f));
+        sumTable.RowStyles.Add(new RowStyle(SizeType.Percent, 34f));
+
+        Label SumLabel(string t) => new()
+        {
+            Text = t,
+            Dock = DockStyle.Fill,
+            Font = UiFont,
+            ForeColor = UiTextSecondary,
+            TextAlign = ContentAlignment.MiddleRight,
+            RightToLeft = RightToLeft.Yes
+        };
+
+        _subtotalValueLabel.Dock = DockStyle.Fill;
+        _subtotalValueLabel.AutoSize = false;
+        _subtotalValueLabel.Font = UiFont;
+        _subtotalValueLabel.ForeColor = UiTextPrimary;
+        _subtotalValueLabel.TextAlign = ContentAlignment.MiddleLeft;
+
+        _discountValueLabel.Dock = DockStyle.Fill;
+        _discountValueLabel.AutoSize = false;
+        _discountValueLabel.Font = UiFont;
+        _discountValueLabel.ForeColor = Color.FromArgb(192, 57, 43);
+        _discountValueLabel.TextAlign = ContentAlignment.MiddleLeft;
+
+        _totalValueLabel.Dock = DockStyle.Fill;
+        _totalValueLabel.AutoSize = false;
+        _totalValueLabel.Font = new Font("Segoe UI", 14f, FontStyle.Bold);
+        _totalValueLabel.ForeColor = Color.FromArgb(27, 94, 32);
+        _totalValueLabel.TextAlign = ContentAlignment.MiddleLeft;
+
+        sumTable.Controls.Add(SumLabel("المجموع الفرعي"), 0, 0);
+        sumTable.Controls.Add(_subtotalValueLabel, 1, 0);
+        sumTable.Controls.Add(SumLabel("الخصم"), 0, 1);
+        sumTable.Controls.Add(_discountValueLabel, 1, 1);
+        sumTable.Controls.Add(SumLabel("الإجمالي"), 0, 2);
+        sumTable.Controls.Add(_totalValueLabel, 1, 2);
+        summaryBox.Controls.Add(sumTable);
+
+        var payBtn = new Button
+        {
+            Text = "دفع وإصدار الفاتورة",
+            Dock = DockStyle.Top,
+            Height = 42,
+            BackColor = Color.FromArgb(39, 174, 96),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI", 11f, FontStyle.Bold),
+            Cursor = Cursors.Hand,
+            RightToLeft = RightToLeft.Yes,
+            UseCompatibleTextRendering = false,
+            UseVisualStyleBackColor = false,
+            Margin = new Padding(0, 0, 0, 6)
+        };
+        payBtn.FlatAppearance.BorderSize = 0;
+        payBtn.Click += async (_, _) => await CompleteSaleAsync();
+
+        var oilSection = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 36,
+            ColumnCount = 7,
+            RowCount = 1,
+            BackColor = Color.White,
+            Margin = new Padding(0, 4, 0, 0)
+        };
+        oilSection.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 44));
+        oilSection.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 62));
+        oilSection.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 44));
+        oilSection.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 58));
+        oilSection.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 38));
+        oilSection.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 66));
+        oilSection.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        Label OilLbl(string t) => new()
+        {
+            Text = t,
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI", 9f),
+            ForeColor = UiTextSecondary,
+            TextAlign = ContentAlignment.MiddleRight
+        };
+
+        _oilChangeCustomerId.Dock = DockStyle.Fill;
+        _oilChangeCustomerId.Minimum = 1;
+        _oilChangeCustomerId.Maximum = 999_999;
+        _oilChangeCustomerId.Font = UiFont;
+
+        _oilChangeCarId.Dock = DockStyle.Fill;
+        _oilChangeCarId.Minimum = 1;
+        _oilChangeCarId.Maximum = 999_999;
+        _oilChangeCarId.Font = UiFont;
+
+        _oilChangeOdometer.Dock = DockStyle.Fill;
+        _oilChangeOdometer.Minimum = 0;
+        _oilChangeOdometer.Maximum = 999_999;
+        _oilChangeOdometer.Font = UiFont;
+
+        var oilBtn = new Button
+        {
+            Text = "تغيير الزيت",
+            Dock = DockStyle.Fill,
+            BackColor = Color.FromArgb(33, 150, 243),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            Cursor = Cursors.Hand,
+            UseCompatibleTextRendering = false,
+            UseVisualStyleBackColor = false,
+            Margin = new Padding(6, 0, 0, 0)
+        };
+        oilBtn.FlatAppearance.BorderSize = 0;
+        oilBtn.Click += async (_, _) => await CompleteOilChangeServiceAsync();
+
+        oilSection.Controls.Add(OilLbl("زبون:"), 0, 0);
+        oilSection.Controls.Add(_oilChangeCustomerId, 1, 0);
+        oilSection.Controls.Add(OilLbl("سيارة:"), 2, 0);
+        oilSection.Controls.Add(_oilChangeCarId, 3, 0);
+        oilSection.Controls.Add(OilLbl("عداد:"), 4, 0);
+        oilSection.Controls.Add(_oilChangeOdometer, 5, 0);
+        oilSection.Controls.Add(oilBtn, 6, 0);
+
+        bottomPanel.Controls.Add(oilSection);
+        bottomPanel.Controls.Add(payBtn);
+        bottomPanel.Controls.Add(summaryBox);
+        bottomPanel.Controls.Add(discPanel);
+        bottomPanel.Controls.Add(custPanel);
+
+        cartCard.Controls.Add(bottomPanel);
+        cartCard.Controls.Add(_cartGrid);
+        cartCard.Controls.Add(removeBar);
+        cartCard.Controls.Add(cartHeader);
+
+        body.Controls.Add(prodCard, 0, 0);
+        body.Controls.Add(cartCard, 1, 0);
+
+        root.Controls.Add(kpiRow, 0, 0);
+        root.Controls.Add(body, 0, 1);
+        tab.Controls.Add(root);
         return tab;
     }
 
     private TabPage BuildInventoryTab()
     {
-        var tab = new TabPage("المخزون");
-        _inventoryTopPanel = new Panel { Dock = DockStyle.Top, Height = 268, Padding = new Padding(12, 10, 12, 8), BackColor = Color.FromArgb(245, 247, 250) };
+        var tab = new TabPage("المخزون") { RightToLeft = RightToLeft.Yes, BackColor = Color.FromArgb(245, 247, 250) };
+
+        _inventoryTopPanel = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 428,
+            Padding = new Padding(14, 12, 14, 8),
+            BackColor = Color.FromArgb(245, 247, 250)
+        };
+
         var inventoryStockHint = new Label
         {
             Dock = DockStyle.Bottom,
@@ -859,36 +1351,66 @@ public class MainForm : Form
             RightToLeft = RightToLeft.Yes
         };
 
-        var browseGroup = new GroupBox { Dock = DockStyle.Top, Height = 76, Text = "مخزون الفرع", Font = UiFontCaption, RightToLeft = RightToLeft.Yes };
+        var kpiStrip = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 70,
+            ColumnCount = 3,
+            RowCount = 1,
+            BackColor = Color.FromArgb(245, 247, 250),
+            Margin = new Padding(0, 0, 0, 10)
+        };
+        for (var i = 0; i < 3; i++)
+            kpiStrip.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.3f));
+
+        _inventoryTotalItemsLabel.Dock = DockStyle.Fill;
+        _inventoryTotalItemsLabel.Font = new Font("Segoe UI", 10.5f, FontStyle.Bold);
+        _inventoryTotalValueLabel.Dock = DockStyle.Fill;
+        _inventoryTotalValueLabel.Font = new Font("Segoe UI", 10.5f, FontStyle.Bold);
+        _inventoryLowStockLabel.Dock = DockStyle.Fill;
+        _inventoryLowStockLabel.Font = new Font("Segoe UI", 10.5f, FontStyle.Bold);
+
+        kpiStrip.Controls.Add(WrapInBanner(_inventoryTotalItemsLabel, Color.FromArgb(33, 150, 243)), 0, 0);
+        kpiStrip.Controls.Add(WrapInBanner(_inventoryTotalValueLabel, Color.FromArgb(39, 174, 96)), 1, 0);
+        kpiStrip.Controls.Add(WrapInBanner(_inventoryLowStockLabel, Color.FromArgb(192, 57, 43)), 2, 0);
+
+        var filterCard = MakePosCard();
+        filterCard.Dock = DockStyle.Top;
+        filterCard.Height = 58;
+        filterCard.Padding = new Padding(12, 10, 12, 10);
+
         _inventorySearchBox.TextChanged += (_, _) => ApplyInventoryFilter();
         _inventoryLowStockOnlyCheck.CheckedChanged += (_, _) => ApplyInventoryFilter();
         _inventoryShowZeroStockCheck.CheckedChanged += (_, _) => ApplyInventoryFilter();
         _inventoryLowStockOnlyCheck.Font = UiFontCaption;
+        _inventoryShowZeroStockCheck.Font = UiFontCaption;
 
-        var browseLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 1, Padding = new Padding(0, 4, 0, 0) };
-        browseLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 52));
-        browseLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
-        browseLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 52));
-        browseLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 268));
-        browseLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        var labelFont = UiFontCaption;
-        browseLayout.Controls.Add(new Label { Text = "الفرع", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight, Font = labelFont, ForeColor = UiTextPrimary, RightToLeft = RightToLeft.Yes }, 0, 0);
-        browseLayout.Controls.Add(_inventoryWarehouseCombo, 1, 0);
-        browseLayout.Controls.Add(new Label { Text = "بحث", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight, Font = labelFont, ForeColor = UiTextPrimary, RightToLeft = RightToLeft.Yes }, 2, 0);
-        browseLayout.Controls.Add(_inventorySearchBox, 3, 0);
-        var invFilterChecks = new FlowLayoutPanel
+        var filterRow = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = true,
-            AutoSize = true,
-            Padding = new Padding(0, 4, 0, 0)
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = true
         };
-        invFilterChecks.Controls.Add(_inventoryShowZeroStockCheck);
-        invFilterChecks.Controls.Add(_inventoryLowStockOnlyCheck);
-        browseLayout.Controls.Add(invFilterChecks, 4, 0);
-        browseGroup.Controls.Add(browseLayout);
 
+        _inventoryWarehouseCombo.Height = 30;
+        _inventoryWarehouseCombo.Font = UiFont;
+        _inventoryWarehouseCombo.Width = 180;
+
+        _inventorySearchBox.Height = 30;
+        _inventorySearchBox.Font = UiFont;
+        _inventorySearchBox.Width = 200;
+        _inventorySearchBox.PlaceholderText = "بحث في المخزون...";
+
+        filterRow.Controls.Add(_inventoryResetBranchPriceBtn);
+        filterRow.Controls.Add(_inventoryLowStockOnlyCheck);
+        filterRow.Controls.Add(_inventoryShowZeroStockCheck);
+        filterRow.Controls.Add(_inventorySearchBox);
+        filterRow.Controls.Add(new Label { Text = "بحث:", AutoSize = true, Padding = new Padding(0, 6, 6, 0), Font = UiFontCaption, ForeColor = UiTextPrimary });
+        filterRow.Controls.Add(_inventoryWarehouseCombo);
+        filterRow.Controls.Add(new Label { Text = "الفرع:", AutoSize = true, Padding = new Padding(0, 6, 6, 0), Font = UiFontCaption, ForeColor = UiTextPrimary });
+        filterCard.Controls.Add(filterRow);
+
+        var labelFont = UiFontCaption;
         _inventoryAdminGroup = new GroupBox { Dock = DockStyle.Top, Height = 76, Text = "تعيين الكمية (مدير)", Font = UiFontCaption, RightToLeft = RightToLeft.Yes };
         var setQtyButton = BuildButton("تطبيق الكمية", Color.FromArgb(52, 152, 219));
         setQtyButton.Click += async (_, _) => await SetInventoryQuantityAsync();
@@ -933,7 +1455,7 @@ public class MainForm : Form
         _chooseImageButton.Click += (_, _) => ChooseNewProductImage();
         var addProductButton = BuildButton("إضافة صنف", Color.FromArgb(39, 174, 96));
         addProductButton.Click += async (_, _) => await AddNewProductAsync();
-        foreach (var c in new Control[] { _inventorySearchBox, _inventoryProductCombo, _inventorySetQty, _newProductCompanyCombo, _newProductName, _newProductType, _newProductPackageSize, _newProductPrice, _newProductOpeningStock, _inventoryLowStockOnlyCheck, _inventoryShowZeroStockCheck, _chooseImageButton, addProductButton, setQtyButton, _inventoryWarehouseCombo })
+        foreach (var c in new Control[] { _inventorySearchBox, _inventoryProductCombo, _inventorySetQty, _newProductCompanyCombo, _newProductName, _newProductType, _newProductPackageSize, _newProductPrice, _newProductOpeningStock, _inventoryLowStockOnlyCheck, _inventoryShowZeroStockCheck, _chooseImageButton, addProductButton, setQtyButton, _inventoryWarehouseCombo, _inventoryResetBranchPriceBtn })
         {
             c.Font = UiFont;
         }
@@ -962,21 +1484,33 @@ public class MainForm : Form
         _inventoryTopPanel.Controls.Add(inventoryStockHint);
         _inventoryTopPanel.Controls.Add(_inventoryAddProductGroup);
         _inventoryTopPanel.Controls.Add(_inventoryAdminGroup);
-        _inventoryTopPanel.Controls.Add(browseGroup);
-
-        var kpiPanel = new Panel { Dock = DockStyle.Fill, Height = 104, Padding = new Padding(10, 4, 10, 4) };
-        kpiPanel.Controls.Add(_inventoryLowStockLabel);
-        kpiPanel.Controls.Add(_inventoryTotalValueLabel);
-        kpiPanel.Controls.Add(_inventoryTotalItemsLabel);
+        _inventoryTopPanel.Controls.Add(filterCard);
+        _inventoryTopPanel.Controls.Add(kpiStrip);
 
         StyleGrid(_inventoryGrid);
         ConfigureInventoryColumns();
+        _inventoryGrid.DataError += (_, e) => e.ThrowException = false;
+        _inventoryGrid.CellValidating += InventoryGrid_CellValidating;
+        _inventoryGrid.CellEndEdit += InventoryGrid_CellEndEdit;
+        _inventoryResetBranchPriceBtn.Click += async (_, _) => await InventoryResetBranchPriceAsync();
+        _inventoryGrid.Dock = DockStyle.Fill;
         _inventoryGrid.DataSource = _inventoryBinding;
-        var contentSplit = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, IsSplitterFixed = false };
-        ApplyInitialSplitterDistance(contentSplit, 420);
-        contentSplit.Panel1.Controls.Add(_inventoryGrid);
-        contentSplit.Panel2.Controls.Add(kpiPanel);
-        tab.Controls.Add(contentSplit);
+        _inventoryGrid.BackgroundColor = Color.White;
+        _inventoryGrid.RowTemplate.Height = 40;
+        _inventoryGrid.Font = new Font("Segoe UI", 11f);
+        _inventoryGrid.DefaultCellStyle.Padding = new Padding(10, 4, 10, 4);
+        _inventoryGrid.BorderStyle = BorderStyle.None;
+        _inventoryGrid.GridColor = Color.FromArgb(232, 234, 237);
+
+        var gridCard = MakePosCard();
+        gridCard.Dock = DockStyle.Fill;
+        gridCard.Padding = new Padding(0);
+        gridCard.Controls.Add(_inventoryGrid);
+
+        var gridWrapper = new Panel { Dock = DockStyle.Fill, Padding = new Padding(14, 8, 14, 14), BackColor = Color.FromArgb(245, 247, 250) };
+        gridWrapper.Controls.Add(gridCard);
+
+        tab.Controls.Add(gridWrapper);
         tab.Controls.Add(_inventoryTopPanel);
         return tab;
     }
@@ -1930,7 +2464,6 @@ public class MainForm : Form
 
     private TabPage BuildMainWarehouseTab()
     {
-        const int pairGap = 15;
         var tab = new TabPage("المستودع الرئيسي")
         {
             // Avoid mirroring nested TableLayoutPanels (e.g. form column order) from an implicit RTL chain.
@@ -2030,18 +2563,18 @@ public class MainForm : Form
             Margin = new Padding(0, 0, 0, 10),
             RightToLeft = RightToLeft.No
         };
-        middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 74f));
-        middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 26f));
+        middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        middle.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 224f));
 
         var leftCard = new Panel
         {
             Dock = DockStyle.Fill,
             Margin = new Padding(0, 0, 12, 0),
             BackColor = Color.White,
-            Padding = new Padding(14, 10, 14, 10),
+            Padding = new Padding(16, 14, 16, 14),
             BorderStyle = BorderStyle.FixedSingle,
-            // LTR so child formGrid column 0 = real left (catalog → qty → price). Parent RTL mirrors layout.
-            RightToLeft = RightToLeft.No
+            RightToLeft = RightToLeft.No,
+            AutoScroll = true
         };
 
         var purchaseHeader = new TableLayoutPanel
@@ -2089,6 +2622,7 @@ public class MainForm : Form
             if (_syncingMainWarehouseProductCombo) return;
             SyncMainWarehouseRetailFromSelectedCatalog();
             await RefreshMainWarehouseAvailableStockHintAsync();
+            await SyncMainWarehouseBranchPricePanelAsync();
             SyncMainWarehouseCommandStates();
         };
 
@@ -2133,99 +2667,161 @@ public class MainForm : Form
         purchaseHeader.Controls.Add(lblSectionInputs, 0, 0);
         purchaseHeader.Controls.Add(_mwAvailableStockLabel, 1, 0);
 
-        var formGrid = new TableLayoutPanel
+        var productPanel = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
-            ColumnCount = 4,
-            RowCount = 4,
-            // LTR: catalog | qty | purchase cost | retail (POS).
-            RightToLeft = RightToLeft.No,
-            Padding = new Padding(0, 0, 0, 2)
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(0, 0, 0, 12),
+            BackColor = Color.White
         };
-        formGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30f));
-        formGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 23f));
-        formGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 23f));
-        formGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24f));
-        formGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        formGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 44f));
-        formGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 22f));
-        formGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 82f));
-
-        formGrid.Controls.Add(MwLblAbove("الصنف (من الكتالوج)"), 0, 0);
-        formGrid.Controls.Add(MwLblAbove("كمية الشراء"), 1, 0);
-        formGrid.Controls.Add(MwLblAbove("سعر الشراء (تكلفة)"), 2, 0);
-        formGrid.Controls.Add(MwLblAbove("سعر البيع (الصرف / نقطة البيع)"), 3, 0);
-
+        productPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        productPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 42f));
+        productPanel.Controls.Add(MwLblAbove("الصنف (من الكتالوج)"), 0, 0);
         var skuHost = new Panel
         {
             Dock = DockStyle.Fill,
-            Margin = new Padding(0, 0, pairGap, 0),
             BackColor = Color.White,
-            RightToLeft = RightToLeft.No
+            RightToLeft = RightToLeft.No,
+            Padding = new Padding(0, 2, 0, 0)
         };
         _mwProductLookup.Font = MwFontInput;
         _mwProductLookup.ItemHeight = 26;
         _mwProductLookup.Dock = DockStyle.Fill;
         _mwProductLookup.TabIndex = 0;
         _mwProductLookup.MinimumSize = new Size(80, 34);
-        _mwProductLookup.MaximumSize = new Size(0, 36);
+        _mwProductLookup.MaximumSize = new Size(0, 38);
         skuHost.Controls.Add(_mwProductLookup);
-        formGrid.Controls.Add(skuHost, 0, 1);
+        productPanel.Controls.Add(skuHost, 0, 1);
+
+        var qtyCostSaleRow = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 70,
+            ColumnCount = 3,
+            RowCount = 2,
+            Padding = new Padding(0, 0, 0, 12),
+            BackColor = Color.White
+        };
+        qtyCostSaleRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
+        qtyCostSaleRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
+        qtyCostSaleRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.34f));
+        qtyCostSaleRow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        qtyCostSaleRow.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        qtyCostSaleRow.Controls.Add(MwLblAbove("كمية الشراء"), 0, 0);
+        qtyCostSaleRow.Controls.Add(MwLblAbove("سعر الشراء (تكلفة)"), 1, 0);
+        qtyCostSaleRow.Controls.Add(MwLblAbove("سعر البيع (الصرف / نقطة البيع)"), 2, 0);
         _mwQuantity.Dock = DockStyle.Fill;
         _mwPurchasePrice.Dock = DockStyle.Fill;
         _mwRetailPrice.Dock = DockStyle.Fill;
-        _mwQuantity.Margin = new Padding(0, 0, pairGap / 2, 0);
-        _mwPurchasePrice.Margin = new Padding(pairGap / 4, 0, pairGap / 4, 0);
-        _mwRetailPrice.Margin = new Padding(pairGap / 2, 0, 0, 0);
+        _mwQuantity.Margin = new Padding(0, 0, 10, 0);
+        _mwPurchasePrice.Margin = new Padding(0, 0, 10, 0);
+        _mwRetailPrice.Margin = new Padding(0, 0, 0, 0);
         _mwQuantity.TabIndex = 1;
         _mwPurchasePrice.TabIndex = 2;
         _mwRetailPrice.TabIndex = 3;
-        formGrid.Controls.Add(_mwQuantity, 1, 1);
-        formGrid.Controls.Add(_mwPurchasePrice, 2, 1);
-        formGrid.Controls.Add(_mwRetailPrice, 3, 1);
+        qtyCostSaleRow.Controls.Add(_mwQuantity, 0, 1);
+        qtyCostSaleRow.Controls.Add(_mwPurchasePrice, 1, 1);
+        qtyCostSaleRow.Controls.Add(_mwRetailPrice, 2, 1);
 
-        var sepHost = new Panel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Color.White,
-            Margin = new Padding(0, 6, 0, 6)
-        };
-        sepHost.Controls.Add(new Panel
+        var dateRow = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 2,
-            BackColor = Color.FromArgb(200, 204, 214)
-        });
-        formGrid.Controls.Add(sepHost, 0, 2);
-        formGrid.SetColumnSpan(sepHost, 4);
-
-        var dateBlock = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
+            Height = 70,
             ColumnCount = 2,
             RowCount = 2,
-            RightToLeft = RightToLeft.No,
-            BackColor = Color.White,
-            Margin = new Padding(0, 0, 0, 0)
+            Padding = new Padding(0, 0, 0, 12),
+            BackColor = Color.White
         };
-        dateBlock.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-        dateBlock.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-        dateBlock.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        dateBlock.RowStyles.Add(new RowStyle(SizeType.Absolute, 44f));
-        dateBlock.Controls.Add(MwLblAbove("تاريخ الإنتاج"), 0, 0);
-        dateBlock.Controls.Add(MwLblAbove("تاريخ الشراء"), 1, 0);
+        dateRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        dateRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        dateRow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        dateRow.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        dateRow.Controls.Add(MwLblAbove("تاريخ الإنتاج"), 0, 0);
+        dateRow.Controls.Add(MwLblAbove("تاريخ الشراء"), 1, 0);
         _mwProductionDate.Dock = DockStyle.Fill;
         _mwPurchaseDate.Dock = DockStyle.Fill;
-        _mwProductionDate.Margin = new Padding(0, 0, pairGap / 2, 0);
-        _mwPurchaseDate.Margin = new Padding(pairGap / 2, 0, 0, 0);
+        _mwProductionDate.Margin = new Padding(0, 0, 10, 0);
+        _mwPurchaseDate.Margin = new Padding(0, 0, 0, 0);
         _mwProductionDate.TabIndex = 4;
         _mwPurchaseDate.TabIndex = 5;
-        dateBlock.Controls.Add(_mwProductionDate, 0, 1);
-        dateBlock.Controls.Add(_mwPurchaseDate, 1, 1);
-        formGrid.Controls.Add(dateBlock, 0, 3);
-        formGrid.SetColumnSpan(dateBlock, 4);
+        dateRow.Controls.Add(_mwProductionDate, 0, 1);
+        dateRow.Controls.Add(_mwPurchaseDate, 1, 1);
 
-        leftCard.Controls.Add(formGrid);
+        var mwFormDivider = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 1,
+            BackColor = Color.FromArgb(230, 230, 230),
+            Margin = new Padding(0, 4, 0, 14)
+        };
+
+        ApplyModernWarehouseNumeric(_mwBranchRetailOverride);
+        _mwBranchPriceWarehouseCombo.Font = MwFontInput;
+        _mwBranchRetailOverride.Dock = DockStyle.Fill;
+        _mwBranchPriceWarehouseCombo.Dock = DockStyle.Fill;
+        _mwBranchPriceSaveBtn = BuildSizedButton("حفظ سعر الفرع", Color.FromArgb(39, 174, 96), 128, 38);
+        _mwBranchPriceResetBtn = BuildSizedButton("إعادة للسعر المرجعي", Color.FromArgb(108, 117, 125), 158, 38);
+        ApplyMainWarehousePrimaryButtonTypography(_mwBranchPriceSaveBtn);
+        ApplyMainWarehousePrimaryButtonTypography(_mwBranchPriceResetBtn);
+        _mwBranchPriceSaveBtn.Margin = new Padding(8, 0, 0, 0);
+        _mwBranchPriceResetBtn.Margin = new Padding(8, 0, 0, 0);
+        _mwBranchPriceSaveBtn.Click += async (_, _) => await SaveMainWarehouseBranchPriceAsync();
+        _mwBranchPriceResetBtn.Click += async (_, _) => await ResetMainWarehouseBranchPriceAsync();
+
+        var branchPriceGroup = new GroupBox
+        {
+            Dock = DockStyle.Top,
+            Height = 124,
+            Text = "سعر البيع في الفرع (اختياري — يتجاوز السعر المرجعي)",
+            Font = MwFontSection,
+            ForeColor = UiTextSecondary,
+            Padding = new Padding(12, 10, 12, 10),
+            BackColor = Color.White,
+            RightToLeft = RightToLeft.No,
+            Tag = MainWarehouseUiLabelTag
+        };
+        var branchInner = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 4,
+            RowCount = 2,
+            Padding = Padding.Empty,
+            BackColor = Color.White
+        };
+        branchInner.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30f));
+        branchInner.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30f));
+        branchInner.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 132f));
+        branchInner.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 172f));
+        branchInner.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        branchInner.RowStyles.Add(new RowStyle(SizeType.Absolute, 40f));
+        branchInner.Controls.Add(MwLblAbove("الفرع"), 0, 0);
+        branchInner.Controls.Add(MwLblAbove("السعر في الفرع"), 1, 0);
+        var branchHdrSpacer = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
+        branchInner.Controls.Add(branchHdrSpacer, 2, 0);
+        branchInner.SetColumnSpan(branchHdrSpacer, 2);
+        branchInner.Controls.Add(_mwBranchPriceWarehouseCombo, 0, 1);
+        branchInner.Controls.Add(_mwBranchRetailOverride, 1, 1);
+        var branchBtnFlow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Padding = new Padding(6, 2, 0, 0),
+            BackColor = Color.White
+        };
+        branchBtnFlow.Controls.Add(_mwBranchPriceSaveBtn);
+        branchBtnFlow.Controls.Add(_mwBranchPriceResetBtn);
+        branchInner.Controls.Add(branchBtnFlow, 2, 1);
+        branchInner.SetColumnSpan(branchBtnFlow, 2);
+        branchPriceGroup.Controls.Add(branchInner);
+
+        leftCard.Controls.Add(branchPriceGroup);
+        leftCard.Controls.Add(mwFormDivider);
+        leftCard.Controls.Add(dateRow);
+        leftCard.Controls.Add(qtyCostSaleRow);
+        leftCard.Controls.Add(productPanel);
         leftCard.Controls.Add(purchaseHeader);
 
         var rightCard = new Panel
@@ -2292,6 +2888,8 @@ public class MainForm : Form
         _mainWarehouseToolTip.SetToolTip(_mwCmdDelete, "حذف سجل الشراء المحدد في الجدول.");
         _mainWarehouseToolTip.SetToolTip(_mwCmdClear, "إفراغ الحقول دون حفظ. لا يغيّر بيانات الجدول.");
         _mainWarehouseToolTip.SetToolTip(_mwProductLookup, "اختر الصنف من الكتالوج؛ يظهر الاسم والشركة والنوع والعبوة في سطر واحد.");
+        _mainWarehouseToolTip.SetToolTip(_mwBranchPriceSaveBtn, "حفظ سعر البيع لهذا الصنف في الفرع المختار (يتجاوز السعر المرجعي في نقطة البيع).");
+        _mainWarehouseToolTip.SetToolTip(_mwBranchPriceResetBtn, "إزالة تخصيص الفرع والعودة لسعر البيع المرجعي للصنف.");
         rightCard.Controls.Add(btnCol);
         rightCard.Controls.Add(lblSectionOps);
 
@@ -2422,6 +3020,8 @@ public class MainForm : Form
         AttachWarehouseInputFocusCue(_mwProductionDate);
         AttachWarehouseInputFocusCue(_mwPurchaseDate);
         AttachWarehouseInputFocusCue(_mwProductLookup);
+        AttachWarehouseInputFocusCue(_mwBranchPriceWarehouseCombo);
+        AttachWarehouseInputFocusCue(_mwBranchRetailOverride);
 
         root.Controls.Add(headerPanel, 0, 0);
         root.Controls.Add(excelCard, 0, 1);
@@ -2627,14 +3227,16 @@ public class MainForm : Form
         {
             DataPropertyName = nameof(MainWarehouseRow.CompanyName),
             HeaderText = "الشركة",
-            FillWeight = 12,
+            FillWeight = 10,
+            MinimumWidth = 90,
             ReadOnly = true
         });
         _mainWarehouseGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             DataPropertyName = nameof(MainWarehouseRow.BatchLabel),
             HeaderText = "دفعة الشراء",
-            FillWeight = 10,
+            FillWeight = 7,
+            MinimumWidth = 60,
             ReadOnly = true,
             DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleCenter, NullValue = "" }
         });
@@ -2642,14 +3244,16 @@ public class MainForm : Form
         {
             DataPropertyName = nameof(MainWarehouseRow.InventoryName),
             HeaderText = "اسم المنتج",
-            FillWeight = 18,
+            FillWeight = 14,
+            MinimumWidth = 110,
             ReadOnly = true
         });
         _mainWarehouseGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             DataPropertyName = nameof(MainWarehouseRow.ProductionDate),
             HeaderText = "تاريخ الانتاج",
-            FillWeight = 16,
+            FillWeight = 12,
+            MinimumWidth = 110,
             ReadOnly = true,
             DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd" }
         });
@@ -2658,14 +3262,16 @@ public class MainForm : Form
             DataPropertyName = nameof(MainWarehouseRow.PurchasedQuantity),
             HeaderText = "كمية الشراء",
             FillWeight = 10,
+            MinimumWidth = 92,
             ReadOnly = true,
             DefaultCellStyle = new DataGridViewCellStyle { Format = "N3", Alignment = DataGridViewContentAlignment.MiddleRight }
         });
         _mainWarehouseGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             DataPropertyName = nameof(MainWarehouseRow.OnHandAtMain),
-            HeaderText = "المتبقي بالرئيسي (للمنتج)",
+            HeaderText = "المتبقي بالرئيسي",
             FillWeight = 10,
+            MinimumWidth = 100,
             ReadOnly = true,
             DefaultCellStyle = new DataGridViewCellStyle
             {
@@ -2679,6 +3285,7 @@ public class MainForm : Form
             DataPropertyName = nameof(MainWarehouseRow.PurchasePrice),
             HeaderText = "سعر الشراء (تكلفة)",
             FillWeight = 11,
+            MinimumWidth = 100,
             ReadOnly = true,
             DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight }
         });
@@ -2687,6 +3294,7 @@ public class MainForm : Form
             DataPropertyName = nameof(MainWarehouseRow.RetailUnitPrice),
             HeaderText = "سعر البيع (نقطة البيع)",
             FillWeight = 11,
+            MinimumWidth = 100,
             ReadOnly = true,
             DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight }
         });
@@ -2694,7 +3302,8 @@ public class MainForm : Form
         {
             DataPropertyName = nameof(MainWarehouseRow.PurchaseDate),
             HeaderText = "تاريخ الشراء",
-            FillWeight = 16,
+            FillWeight = 12,
+            MinimumWidth = 110,
             ReadOnly = true,
             DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd" }
         });
@@ -2702,14 +3311,16 @@ public class MainForm : Form
         {
             DataPropertyName = nameof(MainWarehouseRow.PackageSize),
             HeaderText = "نوع العبوه كام لتر",
-            FillWeight = 14,
+            FillWeight = 8,
+            MinimumWidth = 72,
             ReadOnly = true
         });
         _mainWarehouseGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             DataPropertyName = nameof(MainWarehouseRow.ProductCategory),
             HeaderText = "نوع المنتج",
-            FillWeight = 16,
+            FillWeight = 8,
+            MinimumWidth = 72,
             ReadOnly = true
         });
     }
@@ -3415,6 +4026,7 @@ public class MainForm : Form
         _cartBinding.DataSource = new List<CartRow>();
         RefreshCartSummary();
         await RefreshAuditHistoryAsync();
+        await RefreshDailyKpisAsync();
     }
 
     private async Task LoadWarehousesAsync()
@@ -3477,6 +4089,7 @@ public class MainForm : Form
                 UpdatePosStockLocationLabel();
                 await RefreshAvailableProductsAsync();
                 await RefreshReportsAsync();
+                await RefreshDailyKpisAsync();
             };
             _inventoryWarehouseCombo.SelectedIndexChanged += async (_, _) =>
             {
@@ -3488,6 +4101,26 @@ public class MainForm : Form
         }
 
         UpdatePosStockLocationLabel();
+
+        _mwBranchPriceWarehouseCombo.DataSource = null;
+        _mwBranchPriceWarehouseCombo.DisplayMember = nameof(WarehouseDto.Name);
+        _mwBranchPriceWarehouseCombo.ValueMember = nameof(WarehouseDto.Id);
+        _mwBranchPriceWarehouseCombo.DataSource = branches.Count > 0 ? branches.ToList() : opsWarehouses.ToList();
+        if (defaultBranch is not null)
+            _mwBranchPriceWarehouseCombo.SelectedValue = defaultBranch.Id;
+        else if (opsWarehouses.FirstOrDefault() is { } mwfb)
+            _mwBranchPriceWarehouseCombo.SelectedValue = mwfb.Id;
+
+        if (!_mwBranchPriceEventsAttached)
+        {
+            _mwBranchPriceEventsAttached = true;
+            _mwBranchPriceWarehouseCombo.SelectedIndexChanged += async (_, _) =>
+            {
+                await SyncMainWarehouseBranchPricePanelAsync();
+            };
+        }
+
+        await SyncMainWarehouseBranchPricePanelAsync();
     }
 
     /// <summary>POS sells only from the selected branch; main receiving is isolated on the Main Warehouse tab.</summary>
@@ -3689,9 +4322,7 @@ public class MainForm : Form
             _inventoryProductCombo.DataSource = _inventoryRows.ToList();
             _inventoryProductCombo.DisplayMember = nameof(InventoryRow.Name);
             _inventoryProductCombo.ValueMember = nameof(InventoryRow.ProductId);
-            _inventoryTotalItemsLabel.Text = "أصناف برصيد: 0 / 0";
-            _inventoryTotalValueLabel.Text = "قيمة المخزون: 0.00";
-            _inventoryLowStockLabel.Text = "أصناف منخفضة: 0";
+            UpdateInventoryTabKpiLabels();
             return;
         }
 
@@ -3700,18 +4331,22 @@ public class MainForm : Form
 
         await using var db = await _dbFactory.CreateDbContextAsync();
         var products = await db.Products.AsNoTracking().Include(p => p.Company).ToListAsync();
+        var productIds = products.ConvertAll(p => p.Id);
+        var overrides = await _inventoryService.GetBranchSalePriceOverridesAsync(warehouseId, productIds);
         var rows = new List<InventoryRow>();
         foreach (var p in products)
         {
             var stock = await _inventoryService.GetCurrentStockAsync(p.Id, warehouseId);
             var cn = p.Company?.Name ?? string.Empty;
             var display = string.IsNullOrWhiteSpace(cn) ? p.Name : $"{cn} — {p.Name}";
+            var effective = overrides.TryGetValue(p.Id, out var o) ? o : p.UnitPrice;
             rows.Add(new InventoryRow
             {
                 ProductId = p.Id,
                 Name = display,
                 Type = $"{p.ProductCategory} / {p.PackageSize}",
-                UnitPrice = p.UnitPrice,
+                CatalogUnitPrice = p.UnitPrice,
+                BranchSalePrice = effective,
                 CurrentStock = stock,
                 LowStock = stock <= LowStockThreshold
             });
@@ -3722,12 +4357,7 @@ public class MainForm : Form
         _inventoryProductCombo.DisplayMember = nameof(InventoryRow.Name);
         _inventoryProductCombo.ValueMember = nameof(InventoryRow.ProductId);
 
-        var withStock = _inventoryRows.Where(x => x.CurrentStock > 0).ToList();
-        _inventoryTotalItemsLabel.Text =
-            $"أصناف برصيد: {withStock.Count} من {_inventoryRows.Count} SKU (قد يخفي الجدول الرصيد صفر)";
-        _inventoryTotalValueLabel.Text = $"قيمة المخزون: {withStock.Sum(x => x.CurrentStock * x.UnitPrice):n2}";
-        _inventoryLowStockLabel.Text =
-            $"منخفضة (≤{LowStockThreshold}): {withStock.Count(x => x.CurrentStock > 0 && x.CurrentStock <= LowStockThreshold)}";
+        UpdateInventoryTabKpiLabels();
     }
 
     private async Task RefreshAvailableProductsAsync()
@@ -3743,16 +4373,19 @@ public class MainForm : Form
 
         await using var db = await _dbFactory.CreateDbContextAsync();
         var products = await db.Products.AsNoTracking().Include(p => p.Company).Where(x => x.IsActive).ToListAsync();
+        var productIds = products.ConvertAll(p => p.Id);
+        var overrides = await _inventoryService.GetBranchSalePriceOverridesAsync(branchWarehouseId, productIds);
         var rows = new List<AvailableProductRow>();
         foreach (var product in products)
         {
             var stock = await _inventoryService.GetCurrentStockAsync(product.Id, branchWarehouseId);
+            var unit = overrides.TryGetValue(product.Id, out var o) ? o : product.UnitPrice;
             rows.Add(new AvailableProductRow
             {
                 ProductId = product.Id,
                 CompanyName = product.Company?.Name ?? string.Empty,
                 ProductName = product.Name,
-                UnitPrice = product.UnitPrice,
+                UnitPrice = unit,
                 AvailableStock = stock,
                 ProductType = product.ProductCategory
             });
@@ -3886,6 +4519,7 @@ public class MainForm : Form
             _posDiscount.Value = 0;
             await RefreshAllStockViewsAsync();
             RefreshCartSummary();
+            await RefreshDailyKpisAsync();
         }
         catch (Exception ex)
         {
@@ -4752,6 +5386,7 @@ public class MainForm : Form
 
         SyncMainWarehouseRetailFromSelectedCatalog();
         await RefreshMainWarehouseAvailableStockHintAsync();
+        await SyncMainWarehouseBranchPricePanelAsync();
         SyncMainWarehouseCommandStates();
     }
 
@@ -5030,19 +5665,32 @@ public class MainForm : Form
         {
             DataPropertyName = nameof(InventoryRow.CurrentStock),
             HeaderText = "الرصيد الحالي",
-            FillWeight = 16,
+            FillWeight = 14,
             ReadOnly = true,
             DefaultCellStyle = new DataGridViewCellStyle { Format = "N3", Alignment = DataGridViewContentAlignment.MiddleRight }
         });
         _inventoryGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
-            DataPropertyName = nameof(InventoryRow.UnitPrice),
-            HeaderText = "سعر البيع",
-            FillWeight = 12,
+            DataPropertyName = nameof(InventoryRow.CatalogUnitPrice),
+            HeaderText = "السعر المرجعي",
+            FillWeight = 11,
             ReadOnly = true,
             DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight }
         });
-        _inventoryGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InventoryRow.LowStockText), HeaderText = "الحالة", FillWeight = 10, ReadOnly = true });
+        _inventoryGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            DataPropertyName = nameof(InventoryRow.BranchSalePrice),
+            HeaderText = "سعر البيع (الفرع)",
+            FillWeight = 12,
+            ReadOnly = false,
+            DefaultCellStyle = new DataGridViewCellStyle
+            {
+                Format = "N2",
+                Alignment = DataGridViewContentAlignment.MiddleRight,
+                BackColor = Color.FromArgb(255, 251, 220)
+            }
+        });
+        _inventoryGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(InventoryRow.LowStockText), HeaderText = "الحالة", FillWeight = 9, ReadOnly = true });
     }
 
     private void ApplyInventoryFilter()
@@ -5061,6 +5709,151 @@ public class MainForm : Form
             query = query.Where(x => x.LowStock);
 
         _inventoryBinding.DataSource = query.ToList();
+    }
+
+    private void UpdateInventoryTabKpiLabels()
+    {
+        var withStock = _inventoryRows.Where(x => x.CurrentStock > 0).ToList();
+        _inventoryTotalItemsLabel.Text =
+            $"أصناف برصيد: {withStock.Count} من {_inventoryRows.Count} SKU (قد يخفي الجدول الرصيد صفر)";
+        _inventoryTotalValueLabel.Text = $"قيمة المخزون: {withStock.Sum(x => x.CurrentStock * x.BranchSalePrice):n2}";
+        _inventoryLowStockLabel.Text =
+            $"منخفضة (≤{LowStockThreshold}): {withStock.Count(x => x.CurrentStock > 0 && x.CurrentStock <= LowStockThreshold)}";
+    }
+
+    private async Task SyncMainWarehouseBranchPricePanelAsync()
+    {
+        if (_mwBranchPriceWarehouseCombo.Items.Count == 0) return;
+        if (_mwProductLookup.SelectedItem is not MainWarehouseCatalogRow row) return;
+        if (!TryGetWarehouseIdFromCombo(_mwBranchPriceWarehouseCombo, out var whId)) return;
+        var eff = await _inventoryService.GetEffectiveSalePriceAsync(row.Id, whId);
+        _mwBranchRetailOverride.Value = Math.Clamp(eff, _mwBranchRetailOverride.Minimum, _mwBranchRetailOverride.Maximum);
+    }
+
+    private async Task SaveMainWarehouseBranchPriceAsync()
+    {
+        if (_mwProductLookup.SelectedItem is not MainWarehouseCatalogRow row)
+        {
+            MessageBox.Show("اختر صنفاً من الكتالوج.", "سعر الفرع", MessageBoxButtons.OK, MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button1, MsgRtl);
+            return;
+        }
+
+        if (!TryGetWarehouseIdFromCombo(_mwBranchPriceWarehouseCombo, out var whId))
+        {
+            MessageBox.Show("اختر الفرع.", "سعر الفرع", MessageBoxButtons.OK, MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button1, MsgRtl);
+            return;
+        }
+
+        try
+        {
+            await _inventoryService.SetBranchSalePriceAsync(_currentUser.Id, whId, row.Id, _mwBranchRetailOverride.Value);
+            MessageBox.Show("تم حفظ سعر البيع للفرع.", "سعر الفرع", MessageBoxButtons.OK, MessageBoxIcon.Information,
+                MessageBoxDefaultButton.Button1, MsgRtl);
+            await RefreshAllStockViewsAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "سعر الفرع", MessageBoxButtons.OK, MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button1, MsgRtl);
+        }
+    }
+
+    private async Task ResetMainWarehouseBranchPriceAsync()
+    {
+        if (_mwProductLookup.SelectedItem is not MainWarehouseCatalogRow row)
+        {
+            MessageBox.Show("اختر صنفاً من الكتالوج.", "سعر الفرع", MessageBoxButtons.OK, MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button1, MsgRtl);
+            return;
+        }
+
+        if (!TryGetWarehouseIdFromCombo(_mwBranchPriceWarehouseCombo, out var whId))
+        {
+            MessageBox.Show("اختر الفرع.", "سعر الفرع", MessageBoxButtons.OK, MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button1, MsgRtl);
+            return;
+        }
+
+        try
+        {
+            await _inventoryService.DeleteBranchSalePriceAsync(_currentUser.Id, whId, row.Id);
+            await SyncMainWarehouseBranchPricePanelAsync();
+            await RefreshAllStockViewsAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "سعر الفرع", MessageBoxButtons.OK, MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button1, MsgRtl);
+        }
+    }
+
+    private void InventoryGrid_CellValidating(object? sender, DataGridViewCellValidatingEventArgs e)
+    {
+        if (e.ColumnIndex < 0 || e.RowIndex < 0) return;
+        if (_inventoryGrid.Columns[e.ColumnIndex].DataPropertyName != nameof(InventoryRow.BranchSalePrice)) return;
+        var s = Convert.ToString(e.FormattedValue)?.Trim() ?? "";
+        if (!decimal.TryParse(s, NumberStyles.Number, CultureInfo.CurrentCulture, out var d) &&
+            !decimal.TryParse(s, NumberStyles.Number, CultureInfo.InvariantCulture, out d))
+        {
+            e.Cancel = true;
+            MessageBox.Show("أدخل رقماً صالحاً لسعر البيع.", "المخزون", MessageBoxButtons.OK, MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button1, MsgRtl);
+            return;
+        }
+
+        if (d < 0)
+        {
+            e.Cancel = true;
+            MessageBox.Show("السعر لا يمكن أن يكون سالباً.", "المخزون", MessageBoxButtons.OK, MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button1, MsgRtl);
+        }
+    }
+
+    private async void InventoryGrid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+        if (_inventoryGrid.Columns[e.ColumnIndex].DataPropertyName != nameof(InventoryRow.BranchSalePrice)) return;
+        if (_inventoryGrid.Rows[e.RowIndex].DataBoundItem is not InventoryRow row) return;
+        var (ok, wh) = await TryResolveStockContextWarehouseIdAsync();
+        if (!ok) return;
+        try
+        {
+            await _inventoryService.SetBranchSalePriceAsync(_currentUser.Id, wh, row.ProductId, row.BranchSalePrice);
+            row.BranchSalePrice = await _inventoryService.GetEffectiveSalePriceAsync(row.ProductId, wh);
+            _inventoryBinding.ResetBindings(false);
+            UpdateInventoryTabKpiLabels();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "المخزون", MessageBoxButtons.OK, MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button1, MsgRtl);
+            await RefreshInventoryAsync();
+        }
+    }
+
+    private async Task InventoryResetBranchPriceAsync()
+    {
+        if (_inventoryGrid.CurrentRow?.DataBoundItem is not InventoryRow row)
+        {
+            MessageBox.Show("حدد صفاً في الجدول أولاً.", "المخزون", MessageBoxButtons.OK, MessageBoxIcon.Information,
+                MessageBoxDefaultButton.Button1, MsgRtl);
+            return;
+        }
+
+        var (ok, wh) = await TryResolveStockContextWarehouseIdAsync();
+        if (!ok) return;
+        try
+        {
+            await _inventoryService.DeleteBranchSalePriceAsync(_currentUser.Id, wh, row.ProductId);
+            await RefreshInventoryAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "المخزون", MessageBoxButtons.OK, MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button1, MsgRtl);
+        }
     }
 
     /// <summary>Re-applies fonts after <see cref="ApplyUnifiedFont"/> so Main Warehouse keeps its typography (was incorrectly reset to <see cref="UiFontTitle"/>).</summary>
@@ -5388,6 +6181,7 @@ public class MainForm : Form
             _cartBinding.DataSource = new List<CartRow>();
             RefreshCartSummary();
             await RefreshAllStockViewsAsync();
+            await RefreshDailyKpisAsync();
         }
         catch (Exception ex)
         {
@@ -5404,7 +6198,9 @@ public class MainForm : Form
         var search = _posSearchBox.Text.Trim();
         var byCategory = _selectedCategory == "All"
             ? _availableProducts
-            : _availableProducts.Where(x => string.Equals(x.ProductType, _selectedCategory, StringComparison.OrdinalIgnoreCase)).ToList();
+            : _availableProducts.Where(x =>
+                string.Equals(x.ProductType, _selectedCategory, StringComparison.OrdinalIgnoreCase)).ToList();
+
         var filtered = string.IsNullOrWhiteSpace(search)
             ? byCategory
             : byCategory.Where(x =>
@@ -5413,51 +6209,113 @@ public class MainForm : Form
 
         foreach (var product in filtered)
         {
+            var isLow = product.AvailableStock <= LowStockThreshold && product.AvailableStock > 0;
+            var borderColor = isLow ? Color.FromArgb(255, 179, 71) : Color.FromArgb(218, 220, 228);
+
             var card = new Panel
             {
-            Width = 250,
-            Height = 200,
-                Margin = new Padding(8),
+                Width = 210,
+                Height = 172,
+                Margin = new Padding(6),
                 BackColor = Color.White,
-                BorderStyle = BorderStyle.FixedSingle
+                Cursor = Cursors.Hand
             };
-            var imagePlaceholder = new PictureBox
+            card.Paint += (_, e) =>
             {
-                Left = 10,
-                Top = 10,
-                Width = 226,
-                Height = 96,
-                BackColor = Color.FromArgb(236, 240, 241),
+                using var pen = new Pen(borderColor);
+                e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1);
+            };
+
+            var imgBox = new PictureBox
+            {
+                Left = 0, Top = 0,
+                Width = card.Width, Height = 80,
+                BackColor = Color.FromArgb(245, 247, 250),
                 SizeMode = PictureBoxSizeMode.Zoom
             };
-            imagePlaceholder.Cursor = Cursors.Hand;
-            if (_productImageMap.TryGetValue(product.ProductId, out var imagePath) && File.Exists(imagePath))
+            if (_productImageMap.TryGetValue(product.ProductId, out var imgPath) && File.Exists(imgPath))
             {
-                imagePlaceholder.Image = Image.FromFile(imagePath);
-                imagePlaceholder.Click += (_, _) => ShowImagePreview(imagePath, product.DisplayTitle);
+                imgBox.Image = Image.FromFile(imgPath);
+                imgBox.Cursor = Cursors.Hand;
+                imgBox.Click += (_, _) => ShowImagePreview(imgPath, product.DisplayTitle);
             }
-            var name = new Label { Left = 10, Top = 112, Width = 226, Height = 44, Text = product.DisplayTitle, Font = UiFontCaption, ForeColor = UiTextPrimary };
-            var stock = new Label
+            else
             {
-                Left = 10,
-                Top = 148,
-                Width = 124,
-                Height = 28,
-                Text = product.AvailableStock > 0 ? $"متوفر: {product.AvailableStock:n3}" : "غير متوفر",
-                ForeColor = Color.White,
-                BackColor = product.AvailableStock > 0 ? Color.FromArgb(39, 174, 96) : Color.FromArgb(127, 140, 141),
-                TextAlign = ContentAlignment.MiddleCenter
+                var initial = string.IsNullOrWhiteSpace(product.CompanyName)
+                    ? (string.IsNullOrWhiteSpace(product.ProductName)
+                        ? "?"
+                        : product.ProductName[..Math.Min(2, product.ProductName.Length)])
+                    : product.CompanyName[..Math.Min(2, product.CompanyName.Length)];
+                imgBox.Paint += (_, e) =>
+                {
+                    e.Graphics.Clear(Color.FromArgb(236, 240, 248));
+                    using var f = new Font("Segoe UI", 14f, FontStyle.Bold);
+                    using var br = new SolidBrush(Color.FromArgb(144, 164, 195));
+                    var sz = e.Graphics.MeasureString(initial, f);
+                    e.Graphics.DrawString(initial, f, br,
+                        (imgBox.Width - sz.Width) / 2,
+                        (imgBox.Height - sz.Height) / 2);
+                };
+            }
+
+            var nameLabel = new Label
+            {
+                Text = product.DisplayTitle,
+                Left = 8, Top = 84,
+                Width = card.Width - 16, Height = 34,
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                ForeColor = UiTextPrimary,
+                RightToLeft = RightToLeft.Yes,
+                TextAlign = ContentAlignment.TopRight
             };
-            var addBtn = BuildButton("+", Color.FromArgb(41, 128, 185));
-            addBtn.Width = 48;
-            addBtn.Height = 34;
-            addBtn.Left = 188;
-            addBtn.Top = 145;
-            addBtn.Enabled = product.AvailableStock > 0;
+
+            var priceLabel = new Label
+            {
+                Text = $"{product.UnitPrice:n2} ر.س",
+                Left = 8, Top = 116,
+                Width = card.Width - 16, Height = 20,
+                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(21, 101, 192),
+                RightToLeft = RightToLeft.Yes,
+                TextAlign = ContentAlignment.MiddleRight
+            };
+
+            var stockColor = isLow ? Color.FromArgb(230, 74, 25) : Color.FromArgb(39, 174, 96);
+            var stockText = isLow
+                ? $"�� {product.AvailableStock:n0}"
+                : $"متاح: {product.AvailableStock:n0}";
+            var stockLabel = new Label
+            {
+                Text = stockText,
+                Left = 8, Top = 136,
+                Width = 90, Height = 20,
+                Font = new Font("Segoe UI", 8.5f),
+                ForeColor = stockColor,
+                TextAlign = ContentAlignment.MiddleRight,
+                RightToLeft = RightToLeft.Yes
+            };
+
+            var addBtn = new Button
+            {
+                Text = "+",
+                Left = card.Width - 40, Top = 134,
+                Width = 32, Height = 24,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(227, 242, 253),
+                ForeColor = Color.FromArgb(21, 101, 192),
+                Font = new Font("Segoe UI", 11f, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+                Enabled = product.AvailableStock > 0,
+                UseVisualStyleBackColor = false
+            };
+            addBtn.FlatAppearance.BorderColor = Color.FromArgb(187, 222, 251);
+            addBtn.FlatAppearance.BorderSize = 1;
             addBtn.Click += (_, _) => AddProductToCart(product);
-            card.Controls.Add(imagePlaceholder);
-            card.Controls.Add(name);
-            card.Controls.Add(stock);
+
+            card.Controls.Add(imgBox);
+            card.Controls.Add(nameLabel);
+            card.Controls.Add(priceLabel);
+            card.Controls.Add(stockLabel);
             card.Controls.Add(addBtn);
             _productCardsPanel.Controls.Add(card);
         }
@@ -5468,7 +6326,8 @@ public class MainForm : Form
             {
                 Text = "لا توجد أصناف مطابقة.",
                 AutoSize = true,
-                ForeColor = Color.FromArgb(127, 140, 141),
+                ForeColor = Color.FromArgb(180, 180, 180),
+                Font = UiFont,
                 Margin = new Padding(12)
             });
         }
@@ -5521,38 +6380,57 @@ public class MainForm : Form
             string.IsNullOrWhiteSpace(CompanyName) ? ProductName : $"{CompanyName} — {ProductName}";
     }
 
-    private void ConfigureCartColumns()
+    private void ConfigureCartColumnsFixed()
     {
+        _cartGrid.AutoGenerateColumns = false;
         _cartGrid.Columns.Clear();
+        _cartGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+
         _cartGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             DataPropertyName = nameof(CartRow.ProductName),
             HeaderText = "الصنف",
             ReadOnly = true,
-            FillWeight = 46
+            FillWeight = 44,
+            MinimumWidth = 80
         });
         _cartGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             DataPropertyName = nameof(CartRow.Quantity),
             HeaderText = "الكمية",
             FillWeight = 18,
-            DefaultCellStyle = new DataGridViewCellStyle { Format = "N3", Alignment = DataGridViewContentAlignment.MiddleRight }
+            MinimumWidth = 56,
+            DefaultCellStyle = new DataGridViewCellStyle
+            {
+                Format = "N3",
+                Alignment = DataGridViewContentAlignment.MiddleRight
+            }
         });
         _cartGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             DataPropertyName = nameof(CartRow.UnitPrice),
-            HeaderText = "سعر الوحدة",
+            HeaderText = "السعر",
             ReadOnly = true,
-            FillWeight = 18,
-            DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight }
+            FillWeight = 20,
+            MinimumWidth = 60,
+            DefaultCellStyle = new DataGridViewCellStyle
+            {
+                Format = "N2",
+                Alignment = DataGridViewContentAlignment.MiddleRight
+            }
         });
         _cartGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             DataPropertyName = nameof(CartRow.LineTotal),
-            HeaderText = "إجمالي السطر",
+            HeaderText = "الإجمالي",
             ReadOnly = true,
-            FillWeight = 18,
-            DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight }
+            FillWeight = 22,
+            MinimumWidth = 68,
+            DefaultCellStyle = new DataGridViewCellStyle
+            {
+                Format = "N2",
+                Alignment = DataGridViewContentAlignment.MiddleRight
+            }
         });
     }
 
@@ -5570,7 +6448,10 @@ public class MainForm : Form
         public int ProductId { get; set; }
         public string Name { get; set; } = string.Empty;
         public string Type { get; set; } = string.Empty;
-        public decimal UnitPrice { get; set; }
+        /// <summary>Global list price from <see cref="Domain.Product.UnitPrice"/>.</summary>
+        public decimal CatalogUnitPrice { get; set; }
+        /// <summary>Effective retail at the selected branch (override or catalog).</summary>
+        public decimal BranchSalePrice { get; set; }
         public decimal CurrentStock { get; set; }
         public bool LowStock { get; set; }
         public string LowStockText => LowStock ? "منخفض" : "طبيعي";

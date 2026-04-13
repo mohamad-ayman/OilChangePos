@@ -52,6 +52,7 @@ public static class DatabaseInitializer
         await EnsureCatalogCompaniesAsync(dbContext);
         await EnsureWarehouseSchemaAsync(dbContext);
         await EnsureExpensesTableAsync(dbContext);
+        await EnsureBranchProductPricesTableAsync(dbContext);
 
         await ThrowIfProductsMissingCompanyIdAsync(dbContext.Database);
 
@@ -649,6 +650,30 @@ public static class DatabaseInitializer
                 IF OBJECT_ID(N'[dbo].[Users]', N'U') IS NOT NULL
                     ALTER TABLE [dbo].[Expenses] ADD CONSTRAINT [FK_Expenses_Users_CreatedByUserId]
                         FOREIGN KEY ([CreatedByUserId]) REFERENCES [dbo].[Users]([Id]);
+            END
+            """);
+    }
+
+    private static async Task EnsureBranchProductPricesTableAsync(OilChangePosDbContext dbContext)
+    {
+        await dbContext.Database.ExecuteSqlRawAsync(
+            """
+            IF OBJECT_ID(N'[dbo].[BranchProductPrices]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [dbo].[BranchProductPrices](
+                    [Id] INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_BranchProductPrices] PRIMARY KEY,
+                    [WarehouseId] INT NOT NULL,
+                    [ProductId] INT NOT NULL,
+                    [SalePrice] DECIMAL(18,2) NOT NULL
+                );
+                CREATE UNIQUE NONCLUSTERED INDEX [IX_BranchProductPrices_WarehouseId_ProductId]
+                    ON [dbo].[BranchProductPrices]([WarehouseId], [ProductId]);
+                IF OBJECT_ID(N'[dbo].[Warehouses]', N'U') IS NOT NULL
+                    ALTER TABLE [dbo].[BranchProductPrices] ADD CONSTRAINT [FK_BranchProductPrices_Warehouses_WarehouseId]
+                        FOREIGN KEY ([WarehouseId]) REFERENCES [dbo].[Warehouses]([Id]);
+                IF OBJECT_ID(N'[dbo].[Products]', N'U') IS NOT NULL
+                    ALTER TABLE [dbo].[BranchProductPrices] ADD CONSTRAINT [FK_BranchProductPrices_Products_ProductId]
+                        FOREIGN KEY ([ProductId]) REFERENCES [dbo].[Products]([Id]);
             END
             """);
     }

@@ -8,6 +8,7 @@ public record PurchaseStockRequest(int ProductId, decimal Quantity, decimal Purc
 public record TransferStockRequest(int ProductId, decimal Quantity, int FromWarehouseId, int ToWarehouseId, string Notes, int UserId);
 public record AuditLineRequest(int ProductId, decimal ActualQuantity, int WarehouseId, string? ReasonCode = null);
 public record OilChangeRequest(int CustomerId, int CarId, int OdometerKm, int UserId, int WarehouseId, List<SaleItemRequest> Details);
+public record SetBranchPriceRequest(int ProductId, int WarehouseId, decimal SalePrice, int UserId);
 
 public interface IInventoryService
 {
@@ -16,6 +17,14 @@ public interface IInventoryService
     Task<int> AddStockAsync(PurchaseStockRequest request, CancellationToken cancellationToken = default);
     Task<StockAuditResultDto> RunStockAuditAsync(int userId, int warehouseId, List<AuditLineRequest> lines, string notes, CancellationToken cancellationToken = default);
     Task<List<StockAuditHistoryRowDto>> GetStockAuditHistoryAsync(int? warehouseId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken cancellationToken = default);
+
+    /// <summary>Override rows only; key = product id. Empty when no branch-specific price exists.</summary>
+    Task<IReadOnlyDictionary<int, decimal>> GetBranchSalePriceOverridesAsync(int warehouseId, IReadOnlyCollection<int> productIds, CancellationToken cancellationToken = default);
+
+    Task<decimal> GetEffectiveSalePriceAsync(int productId, int warehouseId, CancellationToken cancellationToken = default);
+    Task<List<BranchPriceRowDto>> GetBranchPricesAsync(int warehouseId, CancellationToken cancellationToken = default);
+    Task SetBranchSalePriceAsync(int userId, int warehouseId, int productId, decimal salePrice, CancellationToken cancellationToken = default);
+    Task DeleteBranchSalePriceAsync(int userId, int warehouseId, int productId, CancellationToken cancellationToken = default);
 }
 
 public interface ITransferService
@@ -36,6 +45,9 @@ public interface IServiceOrderService
 public interface IReportService
 {
     Task<DailySalesDto> GetDailySalesReportAsync(DateTime dateUtc, CancellationToken cancellationToken = default);
+
+    /// <summary>Invoices for <paramref name="dateUtc"/> day (UTC) at <paramref name="warehouseId"/>; legacy null <c>WarehouseId</c> counts as main when main exists.</summary>
+    Task<DailySalesDto> GetDailySalesReportForWarehouseAsync(DateTime dateUtc, int warehouseId, CancellationToken cancellationToken = default);
     Task<List<InventorySnapshotDto>> GetInventorySnapshotAsync(int warehouseId, CancellationToken cancellationToken = default);
     Task<SalesDashboardDto> GetSalesDashboardAsync(DateTime fromUtc, DateTime toUtc, int warehouseId, CancellationToken cancellationToken = default);
     Task<List<SalesByWarehouseSummaryDto>> GetSalesSummariesByWarehouseAsync(DateTime fromUtc, DateTime toUtc, CancellationToken cancellationToken = default);
@@ -47,7 +59,7 @@ public interface IReportService
     Task<List<ProductProfitDto>> GetProductProfitBreakdownAsync(DateTime fromLocalDate, DateTime toLocalDate, int? warehouseId, CancellationToken cancellationToken = default);
     Task<ProfitRollupDto> GetProfitRollupAsync(DateTime fromLocalDate, DateTime toLocalDate, int? warehouseId, CancellationToken cancellationToken = default);
 
-    /// <summary>Stock derived from movement in − out (same as ledger). Optional warehouse; retail value uses current <c>Product.UnitPrice</c>.</summary>
+    /// <summary>Stock derived from movement in − out (same as ledger). Optional warehouse; retail value uses branch override when set, else <c>Product.UnitPrice</c>.</summary>
     Task<List<WarehouseStockMovementRowDto>> GetCurrentStockFromMovementsAsync(int? warehouseId, CancellationToken cancellationToken = default);
 
     Task<List<StockMovementHistoryRowDto>> GetStockMovementHistoryAsync(int productId, DateTime fromLocalDate, DateTime toLocalDate, int? warehouseId, CancellationToken cancellationToken = default);
@@ -194,3 +206,5 @@ public record ExpenseReportRowDto(
     string Description,
     string? WarehouseName,
     string? CreatedByUsername);
+
+public record BranchPriceRowDto(int ProductId, string ProductName, int WarehouseId, string WarehouseName, decimal SalePrice);

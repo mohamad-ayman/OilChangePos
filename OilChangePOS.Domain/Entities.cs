@@ -44,6 +44,19 @@ public class Product
     public ICollection<ServiceDetail> ServiceDetails { get; set; } = new List<ServiceDetail>();
     public ICollection<StockMovement> StockMovements { get; set; } = new List<StockMovement>();
     public ICollection<Purchase> Purchases { get; set; } = new List<Purchase>();
+    public ICollection<BranchProductPrice> BranchProductPrices { get; set; } = new List<BranchProductPrice>();
+}
+
+/// <summary>Per-branch retail override; when missing, <see cref="Product.UnitPrice"/> applies.</summary>
+public class BranchProductPrice
+{
+    public int Id { get; set; }
+    public int WarehouseId { get; set; }
+    public int ProductId { get; set; }
+    public decimal SalePrice { get; set; }
+
+    public Warehouse? Warehouse { get; set; }
+    public Product? Product { get; set; }
 }
 
 public class Warehouse

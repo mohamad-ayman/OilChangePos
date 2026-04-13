@@ -6,6 +6,22 @@ using OilChangePOS.Domain;
 
 namespace OilChangePOS.Business;
 
+internal static class BranchSalePricing
+{
+    internal static async Task<Dictionary<int, decimal>> LoadOverridesAsync(
+        OilChangePosDbContext db, int warehouseId, List<int> productIds, CancellationToken cancellationToken = default)
+    {
+        if (productIds.Count == 0)
+            return [];
+        return await db.BranchProductPrices.AsNoTracking()
+            .Where(x => x.WarehouseId == warehouseId && productIds.Contains(x.ProductId))
+            .ToDictionaryAsync(x => x.ProductId, x => x.SalePrice, cancellationToken);
+    }
+
+    internal static decimal EffectiveSalePrice(decimal catalogUnitPrice, IReadOnlyDictionary<int, decimal> overrides, int productId) =>
+        overrides.TryGetValue(productId, out var o) ? o : catalogUnitPrice;
+}
+
 internal static class WarehouseStock
 {
     internal static async Task<decimal> GetOnHandAsync(OilChangePosDbContext db, int productId, int warehouseId, CancellationToken cancellationToken = default)
@@ -186,6 +202,87 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
                 audit.CreatedByUser?.Username ?? $"مستخدم #{audit.CreatedByUserId}");
         });
     }
+
+    public async Task<IReadOnlyDictionary<int, decimal>> GetBranchSalePriceOverridesAsync(
+        int warehouseId, IReadOnlyCollection<int> productIds, CancellationToken cancellationToken = default)
+    {
+        if (productIds.Count == 0)
+            return new Dictionary<int, decimal>();
+        var ids = productIds.Distinct().ToList();
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await BranchSalePricing.LoadOverridesAsync(db, warehouseId, ids, cancellationToken);
+    }
+
+    public async Task<decimal> GetEffectiveSalePriceAsync(int productId, int warehouseId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var product = await db.Products.AsNoTracking().FirstOrDefaultAsync(x => x.Id == productId, cancellationToken)
+            ?? throw new InvalidOperationException($"الصنف {productId} غير موجود.");
+        var ovr = await db.BranchProductPrices.AsNoTracking()
+            .Where(x => x.WarehouseId == warehouseId && x.ProductId == productId)
+            .Select(x => (decimal?)x.SalePrice)
+            .FirstOrDefaultAsync(cancellationToken);
+        return ovr ?? product.UnitPrice;
+    }
+
+    public async Task<List<BranchPriceRowDto>> GetBranchPricesAsync(int warehouseId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.BranchProductPrices.AsNoTracking()
+            .Include(x => x.Product)
+            .Include(x => x.Warehouse)
+            .Where(x => x.WarehouseId == warehouseId)
+            .OrderBy(x => x.Product!.Name)
+            .Select(x => new BranchPriceRowDto(x.ProductId, x.Product!.Name, x.WarehouseId, x.Warehouse!.Name, x.SalePrice))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task SetBranchSalePriceAsync(int userId, int warehouseId, int productId, decimal salePrice, CancellationToken cancellationToken = default)
+    {
+        if (salePrice < 0)
+            throw new InvalidOperationException("سعر البيع لا يمكن أن يكون سالباً.");
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        _ = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
+            ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        var warehouse = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == warehouseId, cancellationToken)
+            ?? throw new InvalidOperationException("المستودع غير موجود.");
+        if (warehouse.Type != WarehouseType.Branch)
+            throw new InvalidOperationException("سعر البيع للفرع يُحدّد لمستودعات الفروع فقط.");
+        _ = await db.Products.FirstOrDefaultAsync(x => x.Id == productId, cancellationToken)
+            ?? throw new InvalidOperationException($"الصنف {productId} غير موجود.");
+
+        var row = await db.BranchProductPrices.FirstOrDefaultAsync(x => x.WarehouseId == warehouseId && x.ProductId == productId, cancellationToken);
+        if (row is null)
+        {
+            db.BranchProductPrices.Add(new BranchProductPrice
+            {
+                WarehouseId = warehouseId,
+                ProductId = productId,
+                SalePrice = salePrice
+            });
+        }
+        else
+            row.SalePrice = salePrice;
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task DeleteBranchSalePriceAsync(int userId, int warehouseId, int productId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        _ = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
+            ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        var warehouse = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == warehouseId, cancellationToken)
+            ?? throw new InvalidOperationException("المستودع غير موجود.");
+        if (warehouse.Type != WarehouseType.Branch)
+            throw new InvalidOperationException("سعر البيع للفرع يُحدّد لمستودعات الفروع فقط.");
+
+        var row = await db.BranchProductPrices.FirstOrDefaultAsync(x => x.WarehouseId == warehouseId && x.ProductId == productId, cancellationToken);
+        if (row is null)
+            return;
+        db.BranchProductPrices.Remove(row);
+        await db.SaveChangesAsync(cancellationToken);
+    }
 }
 
 public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory) : ITransferService
@@ -321,6 +418,7 @@ public class SalesService(IDbContextFactory<OilChangePosDbContext> dbFactory) : 
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
         var productIds = request.Items.Select(x => x.ProductId).Distinct().ToList();
         var products = await db.Products.Where(x => productIds.Contains(x.Id) && x.IsActive).ToDictionaryAsync(x => x.Id, cancellationToken);
+        var priceOverrides = await BranchSalePricing.LoadOverridesAsync(db, request.WarehouseId, productIds, cancellationToken);
 
         var subtotal = 0m;
         foreach (var item in request.Items)
@@ -332,7 +430,8 @@ public class SalesService(IDbContextFactory<OilChangePosDbContext> dbFactory) : 
             if (currentStock < item.Quantity)
                 throw new InvalidOperationException($"رصيد غير كافٍ لـ '{product.Name}'. المتاح={currentStock}، المطلوب={item.Quantity}");
 
-            subtotal += item.Quantity * product.UnitPrice;
+            var unit = BranchSalePricing.EffectiveSalePrice(product.UnitPrice, priceOverrides, item.ProductId);
+            subtotal += item.Quantity * unit;
         }
 
         var invoice = new Invoice
@@ -351,13 +450,14 @@ public class SalesService(IDbContextFactory<OilChangePosDbContext> dbFactory) : 
         foreach (var item in request.Items)
         {
             var product = products[item.ProductId];
-            var lineTotal = item.Quantity * product.UnitPrice;
+            var unit = BranchSalePricing.EffectiveSalePrice(product.UnitPrice, priceOverrides, item.ProductId);
+            var lineTotal = item.Quantity * unit;
             db.InvoiceItems.Add(new InvoiceItem
             {
                 InvoiceId = invoice.Id,
                 ProductId = item.ProductId,
                 Quantity = item.Quantity,
-                UnitPrice = product.UnitPrice,
+                UnitPrice = unit,
                 LineTotal = lineTotal
             });
 
@@ -387,13 +487,16 @@ public class ServiceOrderService(IDbContextFactory<OilChangePosDbContext> dbFact
         var warehouseId = request.WarehouseId;
         var productIds = request.Details.Select(x => x.ProductId).Distinct().ToList();
         var products = await db.Products.Where(x => productIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, cancellationToken);
+        var priceOverrides = await BranchSalePricing.LoadOverridesAsync(db, warehouseId, productIds, cancellationToken);
         decimal subtotal = 0;
 
         foreach (var detail in request.Details)
         {
             var stock = await WarehouseStock.GetOnHandAsync(db, detail.ProductId, warehouseId, cancellationToken);
             if (stock < detail.Quantity) throw new InvalidOperationException($"رصيد غير كافٍ للصنف {detail.ProductId}");
-            subtotal += detail.Quantity * products[detail.ProductId].UnitPrice;
+            var p = products[detail.ProductId];
+            var unit = BranchSalePricing.EffectiveSalePrice(p.UnitPrice, priceOverrides, detail.ProductId);
+            subtotal += detail.Quantity * unit;
         }
 
         var service = new ServiceOrder
@@ -412,13 +515,14 @@ public class ServiceOrderService(IDbContextFactory<OilChangePosDbContext> dbFact
         foreach (var detail in request.Details)
         {
             var product = products[detail.ProductId];
+            var unit = BranchSalePricing.EffectiveSalePrice(product.UnitPrice, priceOverrides, detail.ProductId);
             db.ServiceDetails.Add(new ServiceDetail
             {
                 ServiceOrderId = service.Id,
                 ProductId = detail.ProductId,
                 Quantity = detail.Quantity,
-                UnitPrice = product.UnitPrice,
-                LineTotal = detail.Quantity * product.UnitPrice
+                UnitPrice = unit,
+                LineTotal = detail.Quantity * unit
             });
 
             db.StockMovements.Add(new StockMovement
@@ -461,17 +565,26 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
         return new DailySalesDto(start, invoices.Count, invoices.Sum(x => x.Total), invoices.Sum(x => x.DiscountAmount));
     }
 
+    public async Task<DailySalesDto> GetDailySalesReportForWarehouseAsync(DateTime dateUtc, int warehouseId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var start = dateUtc.Date;
+        var end = start.AddDays(1);
+        var main = await db.Warehouses.AsNoTracking().FirstOrDefaultAsync(x => x.Type == WarehouseType.Main, cancellationToken);
+        var mainId = main?.Id ?? 0;
+        var q = db.Invoices.AsNoTracking().Where(x => x.CreatedAtUtc >= start && x.CreatedAtUtc < end);
+        if (mainId != 0)
+            q = q.Where(x => x.WarehouseId == warehouseId || (x.WarehouseId == null && warehouseId == mainId));
+        else
+            q = q.Where(x => x.WarehouseId == warehouseId);
+        var invoices = await q.ToListAsync(cancellationToken);
+        return new DailySalesDto(start, invoices.Count, invoices.Sum(x => x.Total), invoices.Sum(x => x.DiscountAmount));
+    }
+
     public async Task<List<InventorySnapshotDto>> GetInventorySnapshotAsync(int warehouseId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var products = await db.Products.Where(x => x.IsActive).ToListAsync(cancellationToken);
-        var list = new List<InventorySnapshotDto>();
-        foreach (var product in products)
-        {
-            var stock = await WarehouseStock.GetOnHandAsync(db, product.Id, warehouseId, cancellationToken);
-            list.Add(new InventorySnapshotDto(product.Id, product.Name, stock, product.UnitPrice, stock * product.UnitPrice));
-        }
-        return list.OrderBy(x => x.ProductName).ToList();
+        return await GetInventorySnapshotCoreAsync(db, warehouseId, cancellationToken);
     }
 
     public async Task<SalesDashboardDto> GetSalesDashboardAsync(DateTime fromUtc, DateTime toUtc, int warehouseId, CancellationToken cancellationToken = default)
@@ -770,6 +883,14 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
         var productById = products.ToDictionary(x => x.Id);
         var whById = whs.ToDictionary(x => x.Id);
 
+        var warehouseIds = net.Keys.Select(k => k.WarehouseId).Distinct().ToList();
+        var productIds = net.Keys.Select(k => k.ProductId).Distinct().ToList();
+        var overrideRows = await db.BranchProductPrices.AsNoTracking()
+            .Where(x => warehouseIds.Contains(x.WarehouseId) && productIds.Contains(x.ProductId))
+            .Select(x => new { x.WarehouseId, x.ProductId, x.SalePrice })
+            .ToListAsync(cancellationToken);
+        var overrideLookup = overrideRows.ToDictionary(x => (x.WarehouseId, x.ProductId), x => x.SalePrice);
+
         var list = new List<WarehouseStockMovementRowDto>();
         foreach (var ((pid, wid), qty) in net)
         {
@@ -778,7 +899,8 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
             var cn = p.Company?.Name ?? string.Empty;
             var pname = string.IsNullOrWhiteSpace(cn) ? p.Name : $"{cn} — {p.Name}";
             var site = ArabicWarehouseSiteType(w.Type);
-            list.Add(new WarehouseStockMovementRowDto(pid, pname, p.ProductCategory, p.PackageSize, wid, w.Name, site, qty, p.UnitPrice, qty * p.UnitPrice));
+            var retail = overrideLookup.TryGetValue((wid, pid), out var o) ? o : p.UnitPrice;
+            list.Add(new WarehouseStockMovementRowDto(pid, pname, p.ProductCategory, p.PackageSize, wid, w.Name, site, qty, retail, qty * retail));
         }
 
         return list.OrderBy(x => x.ProductName).ThenBy(x => x.WarehouseName).ToList();
@@ -1026,11 +1148,14 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
     private static async Task<List<InventorySnapshotDto>> GetInventorySnapshotCoreAsync(OilChangePosDbContext db, int warehouseId, CancellationToken cancellationToken)
     {
         var products = await db.Products.Where(x => x.IsActive).ToListAsync(cancellationToken);
+        var ids = products.Select(p => p.Id).ToList();
+        var overrides = await BranchSalePricing.LoadOverridesAsync(db, warehouseId, ids, cancellationToken);
         var list = new List<InventorySnapshotDto>();
         foreach (var product in products)
         {
             var stock = await WarehouseStock.GetOnHandAsync(db, product.Id, warehouseId, cancellationToken);
-            list.Add(new InventorySnapshotDto(product.Id, product.Name, stock, product.UnitPrice, stock * product.UnitPrice));
+            var unit = BranchSalePricing.EffectiveSalePrice(product.UnitPrice, overrides, product.Id);
+            list.Add(new InventorySnapshotDto(product.Id, product.Name, stock, unit, stock * unit));
         }
         return list.OrderBy(x => x.ProductName).ToList();
     }
