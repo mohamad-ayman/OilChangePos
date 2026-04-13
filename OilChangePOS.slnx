@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="OilChangePOS.Business/OilChangePOS.Business.csproj" />
+  <Project Path="OilChangePOS.Data/OilChangePOS.Data.csproj" />
+  <Project Path="OilChangePOS.Domain/OilChangePOS.Domain.csproj" />
+  <Project Path="OilChangePOS.WinForms/OilChangePOS.WinForms.csproj" />
+</Solution>
