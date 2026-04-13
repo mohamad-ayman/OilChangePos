@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sed 's/\\\\s*\\(//')",
+      "Bash(timeout 8 dotnet run --project OilChangePOS.WinForms)"
+    ]
+  }
+}
