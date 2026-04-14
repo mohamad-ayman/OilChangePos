@@ -68,6 +68,10 @@ public partial class MainForm
 
         _cashFlowGrid.DataSource = await _reportService.GetDailyCashFlowAsync(from, to);
         _expenseReportGrid.DataSource = await _reportService.GetExpensesInPeriodAsync(from, to, stockScopeWh);
+
+        _branchSalesLinesGrid.DataSource = await _reportService.GetBranchSalesLineRegisterAsync(from, to, reportWarehouseId);
+        _branchIncomingGrid.DataSource = await _reportService.GetBranchIncomingRegisterAsync(from, to, reportWarehouseId);
+        _branchSellersGrid.DataSource = await _reportService.GetBranchSalesBySellerAsync(from, to, reportWarehouseId);
     }
 
     private int? ResolveReportProfitWarehouseFilter()
@@ -185,6 +189,17 @@ public partial class MainForm
             ? await _reportService.GetSlowMovingProductsAsync(from, to, slowWh, 50)
             : new List<SlowMovingProductDto>();
 
+        var branchWh = scopeWh ?? 0;
+        var branchLines = branchWh > 0
+            ? await _reportService.GetBranchSalesLineRegisterAsync(from, to, branchWh)
+            : new List<BranchSalesLineRegisterDto>();
+        var branchIn = branchWh > 0
+            ? await _reportService.GetBranchIncomingRegisterAsync(from, to, branchWh)
+            : new List<BranchIncomingRegisterDto>();
+        var branchSell = branchWh > 0
+            ? await _reportService.GetBranchSalesBySellerAsync(from, to, branchWh)
+            : new List<BranchSellerSalesSummaryDto>();
+
         using var wb = new XLWorkbook();
         void Sheet<T>(string name, IEnumerable<T> rows, params (string Header, Func<T, object?> Getter)[] cols)
         {
@@ -257,11 +272,266 @@ public partial class MainForm
             ("الصنف", x => x.ProductName),
             ("الرصيد", x => x.OnHandAtWarehouse),
             ("المباع بالفترة", x => x.QuantitySoldInPeriod));
+        Sheet("حصر_اسطر_البيع_فرع", branchLines,
+            ("وقت الفاتورة UTC", x => x.InvoiceDateUtc),
+            ("رقم الفاتورة", x => x.InvoiceNumber),
+            ("الفرع", x => x.WarehouseName),
+            ("العميل", x => x.CustomerDisplay),
+            ("البائع", x => x.SellerUsername),
+            ("الصنف", x => x.ProductName),
+            ("الكمية", x => x.Quantity),
+            ("سعر الوحدة", x => x.UnitPrice),
+            ("صافي السطر", x => x.LineTotal),
+            ("إجمالي الفاتورة قبل الخصم", x => x.InvoiceSubtotal),
+            ("خصم الفاتورة", x => x.InvoiceDiscount),
+            ("صافي الفاتورة", x => x.InvoiceTotal));
+        Sheet("وارد_الفرع", branchIn,
+            ("التاريخ UTC", x => x.EntryDateUtc),
+            ("النوع", x => x.EntryType),
+            ("الصنف", x => x.ProductName),
+            ("الكمية", x => x.Quantity),
+            ("قيمة الشراء", x => x.AmountValue),
+            ("المصدر", x => x.SourceDetail),
+            ("ملاحظات", x => x.Notes),
+            ("المستخدم", x => x.CreatedByDisplay));
+        Sheet("ملخص_البائعين_فرع", branchSell,
+            ("المستخدم", x => x.SellerUsername),
+            ("عدد الفواتير", x => x.InvoiceCount),
+            ("عدد الأسطر", x => x.LineItemCount),
+            ("إجمالي قبل الخصم", x => x.InvoicesGrossSubtotal),
+            ("الخصومات", x => x.InvoicesDiscountTotal),
+            ("صافي المبيعات", x => x.InvoicesNetTotal));
 
         wb.SaveAs(dlg.FileName);
         MessageBox.Show($"تم الحفظ:\n{dlg.FileName}", "تصدير", MessageBoxButtons.OK, MessageBoxIcon.Information,
             MessageBoxDefaultButton.Button1, MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
     }
+
+    /// <summary>Branch-role tab: حصر البيع والوارد والبائع للمستودع الحالي في نقطة البيع/المخزون.</summary>
+    private async Task RefreshBranchOnlyReportsAsync()
+    {
+        if (!IsHandleCreated)
+            return;
+
+        var from = _branchOnlyFromPicker.Value.Date;
+        var to = _branchOnlyToPicker.Value.Date;
+        if (to < from)
+        {
+            MessageBox.Show("لا يمكن أن يكون تاريخ «إلى» قبل تاريخ «من».", "تقارير الفرع", MessageBoxButtons.OK, MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button1, MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
+            return;
+        }
+
+        if (!TryGetWarehouseIdFromCombo(_posWarehouseCombo, out var reportWh)
+            && !TryGetWarehouseIdFromCombo(_inventoryWarehouseCombo, out reportWh))
+        {
+            _branchOnlyPeriodBanner.Text = "   لم يُحدد مستودع فرع — اختر المستودع في «طلب / بيع» أو «المخزون».";
+            _branchOnlySalesLinesGrid.DataSource = Array.Empty<BranchSalesLineRegisterDto>();
+            _branchOnlyIncomingGrid.DataSource = Array.Empty<BranchIncomingRegisterDto>();
+            _branchOnlySellersGrid.DataSource = Array.Empty<BranchSellerSalesSummaryDto>();
+            return;
+        }
+
+        var whName = TryGetWarehouseIdFromCombo(_posWarehouseCombo, out var posWh) && posWh == reportWh
+            ? (_posWarehouseCombo.SelectedItem as WarehouseDto)?.Name ?? "الفرع"
+            : (_inventoryWarehouseCombo.SelectedItem as WarehouseDto)?.Name ?? "الفرع";
+        var fromAr = from.ToString("d", ReportsCulture);
+        var toAr = to.ToString("d", ReportsCulture);
+        _branchOnlyPeriodBanner.Text = $"   من {fromAr}  إلى  {toAr}   ·   {whName}";
+
+        _branchOnlySalesLinesGrid.DataSource = await _reportService.GetBranchSalesLineRegisterAsync(from, to, reportWh);
+        _branchOnlyIncomingGrid.DataSource = await _reportService.GetBranchIncomingRegisterAsync(from, to, reportWh);
+        _branchOnlySellersGrid.DataSource = await _reportService.GetBranchSalesBySellerAsync(from, to, reportWh);
+    }
+
+    private TabPage BuildBranchReportsTab()
+    {
+        var tab = new TabPage("تقارير الفرع");
+        tab.BackColor = Color.FromArgb(245, 247, 250);
+        tab.RightToLeft = RightToLeft.Yes;
+
+        _branchOnlyFromPicker.Value = DateTime.Today.AddDays(-7);
+        _branchOnlyToPicker.Value = DateTime.Today;
+        foreach (var p in new[] { _branchOnlyFromPicker, _branchOnlyToPicker })
+        {
+            p.Font = UiFont;
+            p.Format = DateTimePickerFormat.Custom;
+            p.CustomFormat = "yyyy/MM/dd";
+            p.RightToLeft = RightToLeft.Yes;
+        }
+
+        foreach (var g in new[] { _branchOnlySalesLinesGrid, _branchOnlyIncomingGrid, _branchOnlySellersGrid })
+            g.RightToLeft = RightToLeft.Yes;
+
+        var refresh = BuildButton("تحديث", Color.FromArgb(41, 128, 185));
+        refresh.Click += async (_, _) => await RefreshBranchOnlyReportsAsync();
+
+        var chrome = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 1,
+            RowCount = 4,
+            Padding = new Padding(16, 12, 16, 12),
+            BackColor = Color.FromArgb(245, 247, 250),
+            RightToLeft = RightToLeft.Yes
+        };
+        chrome.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        chrome.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        chrome.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        chrome.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        chrome.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        var title = new Label
+        {
+            Text = "حصر الفرع — البيع والوارد والبائع",
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            Font = UiFontTitle,
+            ForeColor = UiTextPrimary,
+            TextAlign = ContentAlignment.TopRight,
+            RightToLeft = RightToLeft.Yes,
+            Margin = new Padding(0, 0, 0, 6),
+            UseCompatibleTextRendering = false
+        };
+        var subtitle = new Label
+        {
+            Text = "المستودع هو نفس المستودع المختار في «طلب / بيع» و«المخزون». غيّر الفترة ثم اضغط «تحديث».",
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            Font = UiFont,
+            ForeColor = UiTextSecondary,
+            TextAlign = ContentAlignment.TopRight,
+            RightToLeft = RightToLeft.Yes,
+            Margin = new Padding(0, 0, 0, 10),
+            UseCompatibleTextRendering = false
+        };
+
+        void SyncWrap(object? _, EventArgs __)
+        {
+            var w = Math.Max(320, chrome.ClientSize.Width - chrome.Padding.Horizontal);
+            subtitle.MaximumSize = new Size(w, 0);
+        }
+        chrome.HandleCreated += SyncWrap;
+        chrome.Resize += SyncWrap;
+
+        var filterFlow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            RightToLeft = RightToLeft.Yes,
+            WrapContents = true,
+            Padding = new Padding(10, 6, 10, 6),
+            BackColor = Color.FromArgb(248, 250, 252),
+            BorderStyle = BorderStyle.FixedSingle
+        };
+        var lblFrom = new Label
+        {
+            Text = "من",
+            AutoSize = true,
+            Font = UiFontCaption,
+            ForeColor = UiTextPrimary,
+            RightToLeft = RightToLeft.Yes,
+            TextAlign = ContentAlignment.MiddleRight,
+            Margin = new Padding(8, 12, 6, 8),
+            UseCompatibleTextRendering = false
+        };
+        var lblTo = new Label
+        {
+            Text = "إلى",
+            AutoSize = true,
+            Font = UiFontCaption,
+            ForeColor = UiTextPrimary,
+            RightToLeft = RightToLeft.Yes,
+            TextAlign = ContentAlignment.MiddleRight,
+            Margin = new Padding(8, 12, 6, 8),
+            UseCompatibleTextRendering = false
+        };
+        _branchOnlyFromPicker.Margin = new Padding(4, 8, 4, 8);
+        _branchOnlyFromPicker.Width = 160;
+        _branchOnlyToPicker.Margin = new Padding(4, 8, 4, 8);
+        _branchOnlyToPicker.Width = 160;
+        refresh.Margin = new Padding(16, 6, 8, 8);
+        filterFlow.Controls.Add(refresh);
+        filterFlow.Controls.Add(_branchOnlyToPicker);
+        filterFlow.Controls.Add(lblTo);
+        filterFlow.Controls.Add(_branchOnlyFromPicker);
+        filterFlow.Controls.Add(lblFrom);
+
+        _branchOnlyFromPicker.ValueChanged += async (_, _) => await RefreshBranchOnlyReportsAsync();
+        _branchOnlyToPicker.ValueChanged += async (_, _) => await RefreshBranchOnlyReportsAsync();
+
+        chrome.Controls.Add(title, 0, 0);
+        chrome.Controls.Add(subtitle, 0, 1);
+        chrome.Controls.Add(filterFlow, 0, 2);
+
+        var bannerHost = new Panel { Dock = DockStyle.Fill, Padding = new Padding(14, 6, 14, 4), BackColor = Color.FromArgb(245, 247, 250), RightToLeft = RightToLeft.Yes };
+        _branchOnlyPeriodBanner.Dock = DockStyle.Fill;
+        _branchOnlyPeriodBanner.Font = UiFontSection;
+        bannerHost.Controls.Add(_branchOnlyPeriodBanner);
+        chrome.Controls.Add(bannerHost, 0, 3);
+
+        ApplyProfitModuleGridChrome(_branchOnlySalesLinesGrid);
+        ApplyProfitModuleGridChrome(_branchOnlyIncomingGrid);
+        ApplyProfitModuleGridChrome(_branchOnlySellersGrid);
+        ConfigureBranchSalesLinesRegisterColumns(_branchOnlySalesLinesGrid);
+        ConfigureBranchIncomingRegisterColumns(_branchOnlyIncomingGrid);
+        ConfigureBranchSellersSummaryColumns(_branchOnlySellersGrid);
+
+        var branchScrollHost = new Panel
+        {
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            BackColor = Color.FromArgb(245, 247, 250),
+            RightToLeft = RightToLeft.Yes
+        };
+        var branchLayout = new TableLayoutPanel
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Dock = DockStyle.Top,
+            ColumnCount = 1,
+            RowCount = 3,
+            RightToLeft = RightToLeft.Yes,
+            Padding = new Padding(14, 10, 14, 16),
+            BackColor = Color.Transparent
+        };
+        branchLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        branchLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 360f));
+        branchLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 340f));
+        branchLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 300f));
+
+        void SyncBranchScrollLayout(object? _, EventArgs __)
+        {
+            branchLayout.Width = Math.Max(320, branchScrollHost.DisplayRectangle.Width);
+        }
+        branchScrollHost.HandleCreated += SyncBranchScrollLayout;
+        branchScrollHost.Resize += SyncBranchScrollLayout;
+
+        var salesSection = BuildReportModuleGridSection(
+            "١ · حصر أسطر البيع — تفصيل كل صنف مع الفاتورة والعميل والبائع",
+            _branchOnlySalesLinesGrid,
+            new Padding(0, 0, 0, 12));
+        var incomingSection = BuildReportModuleGridSection(
+            "٢ · وارد الفرع — شراء للمستودع + تحويلات واردة خلال الفترة",
+            _branchOnlyIncomingGrid,
+            new Padding(0, 0, 0, 12));
+        var sellersSection = BuildReportModuleGridSection(
+            "٣ · ملخص البائعين — عدد الفواتير والأسطر والإجماليات حسب منشئ الفاتورة",
+            _branchOnlySellersGrid,
+            Padding.Empty);
+
+        branchLayout.Controls.Add(salesSection, 0, 0);
+        branchLayout.Controls.Add(incomingSection, 0, 1);
+        branchLayout.Controls.Add(sellersSection, 0, 2);
+        branchScrollHost.Controls.Add(branchLayout);
+
+        tab.Controls.Add(branchScrollHost);
+        tab.Controls.Add(chrome);
+        return tab;
+    }
+
     private TabPage BuildReportsTab()
     {
         var tab = new TabPage("التقارير");
@@ -282,7 +552,8 @@ public partial class MainForm
                  {
                      _salesByWarehouseGrid, _topProductsGrid, _slowMovingGrid, _reportLowStockGrid, _transferReportGrid,
                      _warehouseInventoryGrid, _profitByInvoiceGrid, _profitByProductGrid, _stockFromMovementsGrid, _stockHistoryGrid,
-                     _transferFullGrid, _cashFlowGrid, _expenseReportGrid
+                     _transferFullGrid, _cashFlowGrid, _expenseReportGrid,
+                     _branchSalesLinesGrid, _branchIncomingGrid, _branchSellersGrid
                  })
             g.RightToLeft = RightToLeft.Yes;
         _profitAllBranchesCheck.Visible = _currentUser.Role == UserRole.Admin;
@@ -329,7 +600,7 @@ public partial class MainForm
         };
         var hdrSubLbl = new Label
         {
-            Text = "أداء الفروع، تقدير الهامش، حركة الأصناف، التحويلات، والمخزون على مستوى الشركة.",
+            Text = "أداء الفروع، تقدير الهامش، حركة الأصناف، التحويلات، والمخزون على مستوى الشركة — ومن تبويب «حصر الفرع» تفاصيل البيع والوارد والبائع للمستودع المحدد.",
             AutoSize = true,
             Dock = DockStyle.Fill,
             Font = brSub,
@@ -568,6 +839,97 @@ public partial class MainForm
 
         var overviewPanel = new Panel { RightToLeft = RightToLeft.Yes, BackColor = Color.FromArgb(245, 247, 250) };
         overviewPanel.Controls.Add(overviewScrollHost);
+
+        // ── Branch register: sales lines + incoming + seller rollup (same filters as report toolbar) ──
+        var branchRegisterPanel = new Panel { RightToLeft = RightToLeft.Yes, BackColor = Color.FromArgb(245, 247, 250) };
+        var branchScrollHost = new Panel
+        {
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            BackColor = Color.FromArgb(245, 247, 250),
+            RightToLeft = RightToLeft.Yes
+        };
+        var branchLayout = new TableLayoutPanel
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Dock = DockStyle.Top,
+            ColumnCount = 1,
+            RowCount = 5,
+            RightToLeft = RightToLeft.Yes,
+            Padding = new Padding(14, 10, 14, 16),
+            BackColor = Color.Transparent
+        };
+        branchLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        branchLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        branchLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        branchLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 360f));
+        branchLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 340f));
+        branchLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 300f));
+
+        var branchRegTitle = new Label
+        {
+            Text = "حصر الفرع — المبيعات والوارد والبائع",
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            Font = UiFontSection,
+            ForeColor = UiTextPrimary,
+            TextAlign = ContentAlignment.TopRight,
+            RightToLeft = RightToLeft.Yes,
+            Margin = new Padding(0, 0, 0, 4),
+            UseCompatibleTextRendering = false
+        };
+        var branchRegSubtitle = new Label
+        {
+            Text = "نفس «المستودع المحدد» و«من / إلى» في شريط التقرير أعلاه. ١) أسطر البيع مع العميل والبائع (منشئ الفاتورة). ٢) وارد الفرع: مشتريات مسجلة على هذا المستودع + تحويلات واردة. ٣) تجميع صافي المبيعات لكل بائع.",
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            Font = new Font(UiFont, FontStyle.Regular),
+            ForeColor = UiTextSecondary,
+            TextAlign = ContentAlignment.TopRight,
+            RightToLeft = RightToLeft.Yes,
+            Margin = new Padding(0, 0, 0, 10),
+            MaximumSize = new Size(980, 0),
+            UseCompatibleTextRendering = false
+        };
+
+        void SyncBranchScrollLayout(object? _, EventArgs __)
+        {
+            var innerW = branchScrollHost.DisplayRectangle.Width;
+            branchLayout.Width = Math.Max(320, innerW);
+            branchRegSubtitle.MaximumSize = new Size(Math.Max(200, innerW - 28), 0);
+        }
+
+        branchScrollHost.HandleCreated += SyncBranchScrollLayout;
+        branchScrollHost.Resize += SyncBranchScrollLayout;
+
+        ApplyProfitModuleGridChrome(_branchSalesLinesGrid);
+        ApplyProfitModuleGridChrome(_branchIncomingGrid);
+        ApplyProfitModuleGridChrome(_branchSellersGrid);
+        ConfigureBranchSalesLinesRegisterColumns(_branchSalesLinesGrid);
+        ConfigureBranchIncomingRegisterColumns(_branchIncomingGrid);
+        ConfigureBranchSellersSummaryColumns(_branchSellersGrid);
+
+        var branchSalesSection = BuildReportModuleGridSection(
+            "١ · حصر أسطر البيع — تفصيل كل صنف مع الفاتورة والعميل والبائع",
+            _branchSalesLinesGrid,
+            new Padding(0, 0, 0, 12));
+        var branchIncomingSection = BuildReportModuleGridSection(
+            "٢ · وارد الفرع — شراء للمستودع المحدد + تحويلات واردة خلال الفترة",
+            _branchIncomingGrid,
+            new Padding(0, 0, 0, 12));
+        var branchSellersSection = BuildReportModuleGridSection(
+            "٣ · ملخص البائعين — عدد الفواتير والأسطر والإجماليات حسب منشئ الفاتورة",
+            _branchSellersGrid,
+            Padding.Empty);
+
+        branchLayout.Controls.Add(branchRegTitle, 0, 0);
+        branchLayout.Controls.Add(branchRegSubtitle, 0, 1);
+        branchLayout.Controls.Add(branchSalesSection, 0, 2);
+        branchLayout.Controls.Add(branchIncomingSection, 0, 3);
+        branchLayout.Controls.Add(branchSellersSection, 0, 4);
+        branchScrollHost.Controls.Add(branchLayout);
+        branchRegisterPanel.Controls.Add(branchScrollHost);
 
         var profitPanel = new Panel { RightToLeft = RightToLeft.Yes, Padding = new Padding(14, 10, 14, 12), BackColor = Color.FromArgb(245, 247, 250) };
         // Scroll the whole profitability column: KPI + filter + both grids need more vertical space than the tab often has.
@@ -889,10 +1251,11 @@ public partial class MainForm
         var reportModuleRoot = new Panel { Dock = DockStyle.Fill, RightToLeft = RightToLeft.Yes };
         reportModuleRoot.Controls.Add(reportViewsHost);
 
-        var reportPanels = new[] { overviewPanel, profitPanel, stockPanel, xferPanel, cashPanel };
+        var reportPanels = new[] { overviewPanel, branchRegisterPanel, profitPanel, stockPanel, xferPanel, cashPanel };
         var reportNavTitles = new[]
         {
             "ملخص الأداء",
+            "حصر الفرع" + Environment.NewLine + "بيع · وارد · بائع",
             "الربحية" + Environment.NewLine + "فاتورة / صنف",
             "المخزون" + Environment.NewLine + "وحركة الصنف",
             "كل التحويلات",
@@ -1110,6 +1473,62 @@ public partial class MainForm
         _cashFlowGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(DailyCashFlowRowDto.PurchaseCashOut), HeaderText = "مشتريات", FillWeight = 12, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
         _cashFlowGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(DailyCashFlowRowDto.OperatingExpenses), HeaderText = "مصروفات تشغيل", FillWeight = 12, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
         _cashFlowGrid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(DailyCashFlowRowDto.NetCashIndicator), HeaderText = "صافي مؤشر", FillWeight = 14, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+    }
+
+    private void ConfigureBranchSalesLinesRegisterColumns() =>
+        ConfigureBranchSalesLinesRegisterColumns(_branchSalesLinesGrid);
+
+    private void ConfigureBranchSalesLinesRegisterColumns(DataGridView grid)
+    {
+        grid.AutoGenerateColumns = false;
+        grid.Columns.Clear();
+        grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchSalesLineRegisterDto.InvoiceDateUtc), HeaderText = "وقت الفاتورة (UTC)", FillWeight = 12, MinimumWidth = 120, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm" } });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchSalesLineRegisterDto.InvoiceNumber), HeaderText = "رقم الفاتورة", FillWeight = 10, MinimumWidth = 100, ReadOnly = true });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchSalesLineRegisterDto.WarehouseName), HeaderText = "الفرع", FillWeight = 8, MinimumWidth = 80, ReadOnly = true });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchSalesLineRegisterDto.CustomerDisplay), HeaderText = "العميل", FillWeight = 14, MinimumWidth = 120, ReadOnly = true });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchSalesLineRegisterDto.SellerUsername), HeaderText = "البائع", FillWeight = 10, MinimumWidth = 88, ReadOnly = true });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchSalesLineRegisterDto.ProductName), HeaderText = "الصنف", FillWeight = 16, MinimumWidth = 120, ReadOnly = true });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchSalesLineRegisterDto.Quantity), HeaderText = "الكمية", FillWeight = 8, MinimumWidth = 72, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N3", Alignment = DataGridViewContentAlignment.MiddleRight } });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchSalesLineRegisterDto.UnitPrice), HeaderText = "سعر الوحدة", FillWeight = 8, MinimumWidth = 88, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchSalesLineRegisterDto.LineTotal), HeaderText = "صافي السطر", FillWeight = 8, MinimumWidth = 88, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchSalesLineRegisterDto.InvoiceSubtotal), HeaderText = "إجمالي الفاتورة", FillWeight = 8, MinimumWidth = 88, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchSalesLineRegisterDto.InvoiceDiscount), HeaderText = "خصم الفاتورة", FillWeight = 8, MinimumWidth = 80, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchSalesLineRegisterDto.InvoiceTotal), HeaderText = "صافي الفاتورة", FillWeight = 8, MinimumWidth = 88, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+    }
+
+    private void ConfigureBranchIncomingRegisterColumns() =>
+        ConfigureBranchIncomingRegisterColumns(_branchIncomingGrid);
+
+    private void ConfigureBranchIncomingRegisterColumns(DataGridView grid)
+    {
+        grid.AutoGenerateColumns = false;
+        grid.Columns.Clear();
+        grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchIncomingRegisterDto.EntryDateUtc), HeaderText = "التاريخ (UTC)", FillWeight = 14, MinimumWidth = 120, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm" } });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchIncomingRegisterDto.EntryType), HeaderText = "نوع الوارد", FillWeight = 12, MinimumWidth = 100, ReadOnly = true });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchIncomingRegisterDto.ProductName), HeaderText = "الصنف", FillWeight = 22, MinimumWidth = 140, ReadOnly = true });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchIncomingRegisterDto.Quantity), HeaderText = "الكمية", FillWeight = 10, MinimumWidth = 80, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N3", Alignment = DataGridViewContentAlignment.MiddleRight } });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchIncomingRegisterDto.AmountValue), HeaderText = "قيمة الشراء", FillWeight = 10, MinimumWidth = 88, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchIncomingRegisterDto.SourceDetail), HeaderText = "المصدر", FillWeight = 14, MinimumWidth = 100, ReadOnly = true });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchIncomingRegisterDto.Notes), HeaderText = "ملاحظات", FillWeight = 12, MinimumWidth = 88, ReadOnly = true });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchIncomingRegisterDto.CreatedByDisplay), HeaderText = "المستخدم", FillWeight = 10, MinimumWidth = 88, ReadOnly = true });
+    }
+
+    private void ConfigureBranchSellersSummaryColumns() =>
+        ConfigureBranchSellersSummaryColumns(_branchSellersGrid);
+
+    private void ConfigureBranchSellersSummaryColumns(DataGridView grid)
+    {
+        grid.AutoGenerateColumns = false;
+        grid.Columns.Clear();
+        grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchSellerSalesSummaryDto.SellerUsername), HeaderText = "البائع (المستخدم)", FillWeight = 22, MinimumWidth = 120, ReadOnly = true });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchSellerSalesSummaryDto.InvoiceCount), HeaderText = "عدد الفواتير", FillWeight = 12, MinimumWidth = 88, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N0", Alignment = DataGridViewContentAlignment.MiddleRight } });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchSellerSalesSummaryDto.LineItemCount), HeaderText = "عدد أسطر البيع", FillWeight = 12, MinimumWidth = 96, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N0", Alignment = DataGridViewContentAlignment.MiddleRight } });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchSellerSalesSummaryDto.InvoicesGrossSubtotal), HeaderText = "إجمالي قبل الخصم", FillWeight = 14, MinimumWidth = 108, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchSellerSalesSummaryDto.InvoicesDiscountTotal), HeaderText = "الخصومات", FillWeight = 12, MinimumWidth = 96, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { DataPropertyName = nameof(BranchSellerSalesSummaryDto.InvoicesNetTotal), HeaderText = "صافي المبيعات", FillWeight = 14, MinimumWidth = 108, ReadOnly = true, DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight } });
     }
 
     private void ConfigureExpenseReportColumns()

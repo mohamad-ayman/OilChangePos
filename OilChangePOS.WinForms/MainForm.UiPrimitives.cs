@@ -41,7 +41,7 @@ public partial class MainForm
         var tbl = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 32,
+            Height = 36,
             ColumnCount = 2,
             RowCount = 1,
             BackColor = Color.White,
@@ -54,7 +54,7 @@ public partial class MainForm
         {
             Text = labelText,
             Dock = DockStyle.Fill,
-            Font = UiFontCaption,
+            Font = new Font(UiFont.FontFamily, 10.75f, FontStyle.Bold, GraphicsUnit.Point),
             ForeColor = UiTextSecondary,
             TextAlign = ContentAlignment.MiddleRight,
             RightToLeft = RightToLeft.Yes
@@ -104,8 +104,8 @@ public partial class MainForm
         {
             Text = caption,
             Dock = DockStyle.Top,
-            Height = 22,
-            Font = new Font("Segoe UI", 9f),
+            Height = 24,
+            Font = new Font("Segoe UI", 10f, FontStyle.Regular, GraphicsUnit.Point),
             ForeColor = Color.FromArgb(108, 108, 120),
             TextAlign = ContentAlignment.BottomRight,
             RightToLeft = RightToLeft.Yes,
@@ -113,7 +113,7 @@ public partial class MainForm
         };
 
         valueLabel.Dock = DockStyle.Fill;
-        valueLabel.Font = new Font("Segoe UI", 17f, FontStyle.Bold);
+        valueLabel.Font = new Font("Segoe UI", 18.5f, FontStyle.Bold, GraphicsUnit.Point);
         valueLabel.ForeColor = accent;
         valueLabel.TextAlign = ContentAlignment.MiddleRight;
         valueLabel.RightToLeft = RightToLeft.Yes;

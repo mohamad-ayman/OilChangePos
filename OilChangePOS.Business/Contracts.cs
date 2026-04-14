@@ -71,6 +71,15 @@ public interface IReportService
 
     Task<List<DailyCashFlowRowDto>> GetDailyCashFlowAsync(DateTime fromLocalDate, DateTime toLocalDate, CancellationToken cancellationToken = default);
     Task<List<ExpenseReportRowDto>> GetExpensesInPeriodAsync(DateTime fromLocalDate, DateTime toLocalDate, int? warehouseId, CancellationToken cancellationToken = default);
+
+    /// <summary>Branch POS: one row per invoice line for the selected warehouse and local-date range (حصر المبيعات).</summary>
+    Task<List<BranchSalesLineRegisterDto>> GetBranchSalesLineRegisterAsync(DateTime fromLocalDate, DateTime toLocalDate, int warehouseId, CancellationToken cancellationToken = default);
+
+    /// <summary>Branch: purchases into the site + transfers in (وارد) for the same warehouse and period.</summary>
+    Task<List<BranchIncomingRegisterDto>> GetBranchIncomingRegisterAsync(DateTime fromLocalDate, DateTime toLocalDate, int warehouseId, CancellationToken cancellationToken = default);
+
+    /// <summary>Branch: sales totals grouped by cashier / invoice creator (البائع).</summary>
+    Task<List<BranchSellerSalesSummaryDto>> GetBranchSalesBySellerAsync(DateTime fromLocalDate, DateTime toLocalDate, int warehouseId, CancellationToken cancellationToken = default);
 }
 
 public interface IExpenseService
@@ -208,3 +217,38 @@ public record ExpenseReportRowDto(
     string? CreatedByUsername);
 
 public record BranchPriceRowDto(int ProductId, string ProductName, int WarehouseId, string WarehouseName, decimal SalePrice);
+
+/// <summary>Detailed branch sales lines for audit (invoice × SKU).</summary>
+public record BranchSalesLineRegisterDto(
+    DateTime InvoiceDateUtc,
+    string InvoiceNumber,
+    string WarehouseName,
+    string CustomerDisplay,
+    string SellerUsername,
+    string ProductName,
+    decimal Quantity,
+    decimal UnitPrice,
+    decimal LineTotal,
+    decimal InvoiceSubtotal,
+    decimal InvoiceDiscount,
+    decimal InvoiceTotal);
+
+/// <summary>Stock entering the branch: direct purchases and transfer receipts.</summary>
+public record BranchIncomingRegisterDto(
+    DateTime EntryDateUtc,
+    string EntryType,
+    string ProductName,
+    decimal Quantity,
+    decimal AmountValue,
+    string SourceDetail,
+    string Notes,
+    string CreatedByDisplay);
+
+/// <summary>Per-cashier rollup for branch-attributed invoices in the period.</summary>
+public record BranchSellerSalesSummaryDto(
+    string SellerUsername,
+    int InvoiceCount,
+    int LineItemCount,
+    decimal InvoicesGrossSubtotal,
+    decimal InvoicesDiscountTotal,
+    decimal InvoicesNetTotal);

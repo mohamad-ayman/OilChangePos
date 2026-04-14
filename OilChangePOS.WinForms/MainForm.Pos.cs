@@ -33,7 +33,7 @@ public partial class MainForm
             }
 
             var report = await _reportService.GetDailySalesReportForWarehouseAsync(DateTime.UtcNow, branchId);
-            _kpiBranchSalesVal.Text = $"{report.TotalSales:n0} ر.س";
+            _kpiBranchSalesVal.Text = $"{report.TotalSales:n0}{UiCurrencySuffix}";
             _kpiBranchInvVal.Text = report.InvoiceCount.ToString();
 
             var low = await _inventoryService.GetLowStockAsync(branchId);
@@ -53,10 +53,10 @@ public partial class MainForm
     //
     // Structure:
     //   tab
-    //   └─ host (Dock=Fill, RightToLeft=No, Padding=10)
-    //      ├─ kpiPanel   (Dock=Top, Height=76)
-    //      ├─ cartPanel  (Dock=Right, Width=355)   ← RIGHT column
-    //      └─ prodPanel  (Dock=Fill)               ← LEFT column (fills remaining)
+    //   └─ host
+    //      ├─ posTopBundle — title + subtitle + white KPI shell
+    //      └─ workspace (Fill) — TableLayout RTL: col0 «السلة» | col1 «المنتجات»
+    //           each cell: cool-gray pad + white inner card
     //
     // APPLY IN CLAUDE CODE:
     //   "Replace BuildPosTab() and RenderProductCards() in MainForm.cs with the
@@ -66,26 +66,90 @@ public partial class MainForm
 
     private TabPage BuildPosTab()
     {
-        var tab = new TabPage("البيع") { RightToLeft = RightToLeft.Yes };
+        var tab = new TabPage("البيع")
+        {
+            RightToLeft = RightToLeft.Yes,
+            BackColor = Color.FromArgb(241, 243, 248),
+            UseVisualStyleBackColor = false
+        };
 
         // ── Host: neutral container, no RTL interference ───────────────────────
         var host = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = Color.FromArgb(243, 245, 248),
-            Padding = new Padding(8, 8, 8, 8),
+            BackColor = Color.FromArgb(241, 243, 248),
+            Padding = new Padding(14, 14, 14, 14),
             RightToLeft = RightToLeft.No // ← critical: prevents Dock mirroring
         };
 
         // ══════════════════════════════════════════════════════════════════════
-        // 1. KPI STRIP  (Dock=Top)
+        // 1. TOP CHROME (reports-style): title + subtitle + KPI strip
         // ══════════════════════════════════════════════════════════════════════
-        var kpiPanel = new Panel
+        var posTopBundle = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 72,
-            BackColor = Color.FromArgb(243, 245, 248),
-            Margin = new Padding(0, 0, 0, 6)
+            Height = 172,
+            ColumnCount = 1,
+            RowCount = 3,
+            BackColor = Color.FromArgb(241, 243, 248),
+            Margin = new Padding(0, 0, 0, 12),
+            Padding = new Padding(0, 0, 0, 0),
+            RightToLeft = RightToLeft.Yes
+        };
+        posTopBundle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        posTopBundle.RowStyles.Add(new RowStyle(SizeType.Absolute, 32f));
+        posTopBundle.RowStyles.Add(new RowStyle(SizeType.Absolute, 42f));
+        posTopBundle.RowStyles.Add(new RowStyle(SizeType.Absolute, 98f));
+
+        var posTitleLbl = new Label
+        {
+            Text = "البيع",
+            Dock = DockStyle.Fill,
+            Font = UiFontTitle,
+            ForeColor = UiTextPrimary,
+            TextAlign = ContentAlignment.TopRight,
+            RightToLeft = RightToLeft.Yes,
+            Margin = new Padding(0, 0, 0, 2),
+            UseCompatibleTextRendering = false
+        };
+        var posSubtitleLbl = new Label
+        {
+            Text = "يسار الشاشة: الأصناف المتاحة. يمين الشاشة: سلة الطلب ثم الملخص والدفع.",
+            Dock = DockStyle.Fill,
+            Font = new Font(UiFont.FontFamily, 10.75f, FontStyle.Regular, GraphicsUnit.Point),
+            ForeColor = UiTextSecondary,
+            TextAlign = ContentAlignment.TopRight,
+            RightToLeft = RightToLeft.Yes,
+            Margin = new Padding(0, 0, 0, 4),
+            UseCompatibleTextRendering = false
+        };
+        void SyncPosSubtitleWrap(object? _, EventArgs __)
+        {
+            var w = Math.Max(280, posTopBundle.ClientSize.Width - posTopBundle.Padding.Horizontal);
+            posSubtitleLbl.MaximumSize = new Size(w, 0);
+        }
+        posTopBundle.HandleCreated += SyncPosSubtitleWrap;
+        posTopBundle.Resize += SyncPosSubtitleWrap;
+
+        var kpiShell = new Panel
+        {
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0),
+            Padding = new Padding(12, 8, 12, 8),
+            BackColor = Color.White
+        };
+        kpiShell.Paint += (s, e) =>
+        {
+            if (s is not Control c) return;
+            using var pen = new Pen(Color.FromArgb(210, 214, 223));
+            e.Graphics.DrawRectangle(pen, 0, 0, c.Width - 1, c.Height - 1);
+        };
+
+        var kpiPanel = new Panel
+        {
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 0, 0, 0),
+            BackColor = Color.White
         };
 
         // Build 4 equal KPI cards using Left/Width calculated on Resize
@@ -112,14 +176,46 @@ public partial class MainForm
         kpiPanel.Resize += LayoutKpis;
         kpiPanel.HandleCreated += LayoutKpis;
 
+        posTopBundle.Controls.Add(posTitleLbl, 0, 0);
+        posTopBundle.Controls.Add(posSubtitleLbl, 0, 1);
+        kpiShell.Controls.Add(kpiPanel);
+        posTopBundle.Controls.Add(kpiShell, 0, 2);
+
         // ══════════════════════════════════════════════════════════════════════
-        // 2. CART PANEL  (Dock=Right, fixed width)
+        // 2–3. WORKSPACE: two modules (RTL col0 = cart | col1 = products) on a cool gray pad
         // ══════════════════════════════════════════════════════════════════════
-        var cartOuter = new Panel
+        var workspace = new Panel
         {
-            Dock = DockStyle.Right,
-            Width = 332,
-            BackColor = Color.FromArgb(243, 245, 248)
+            Dock = DockStyle.Fill,
+            BackColor = Color.FromArgb(241, 243, 248),
+            Padding = new Padding(0, 2, 0, 0)
+        };
+        var mainSplit = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            RightToLeft = RightToLeft.Yes,
+            BackColor = Color.Transparent,
+            Padding = Padding.Empty
+        };
+        // Wider cart column so price/total columns are not truncated before payment.
+        mainSplit.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 468f));
+        mainSplit.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+
+        var cartModule = new Panel
+        {
+            Dock = DockStyle.Fill,
+            Margin = new Padding(8, 0, 6, 0),
+            Padding = new Padding(12),
+            BackColor = Color.FromArgb(226, 230, 238)
+        };
+        var prodModule = new Panel
+        {
+            Dock = DockStyle.Fill,
+            Margin = new Padding(8, 0, 10, 0),
+            Padding = new Padding(14),
+            BackColor = Color.FromArgb(226, 230, 238)
         };
 
         var cartCard = BuildCard();
@@ -129,29 +225,70 @@ public partial class MainForm
         var cartHead = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 38,
+            Height = 46,
             BackColor = Color.White
         };
-        cartHead.Paint += BorderBottom;
-        cartHead.Controls.Add(new Label
+        cartHead.Paint += (s, e) =>
+        {
+            BorderBottom(s, e);
+            if (s is Control c && c.Width > 4)
+            {
+                using var accent = new SolidBrush(Color.FromArgb(39, 174, 96));
+                e.Graphics.FillRectangle(accent, c.Width - 4, 0, 4, c.Height);
+            }
+        };
+        var cartHeadText = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(12, 6, 14, 6),
+            BackColor = Color.White,
+            RightToLeft = RightToLeft.Yes
+        };
+        cartHeadText.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        cartHeadText.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        cartHeadText.Controls.Add(new Label
         {
             Text = "سلة الطلب",
             Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI", 12f, FontStyle.Bold),
-            ForeColor = Color.FromArgb(30, 30, 30),
+            Font = UiFontSection,
+            ForeColor = UiTextPrimary,
             TextAlign = ContentAlignment.MiddleRight,
-            Padding = new Padding(0, 0, 14, 0),
-            RightToLeft = RightToLeft.Yes
-        });
+            RightToLeft = RightToLeft.Yes,
+            AutoSize = true,
+            UseCompatibleTextRendering = false
+        }, 0, 0);
+        cartHeadText.Controls.Add(new Label
+        {
+            Text = "أسطر الفاتورة الحالية",
+            Dock = DockStyle.Fill,
+            Font = new Font(UiFont.FontFamily, 9.25f, FontStyle.Regular, GraphicsUnit.Point),
+            ForeColor = UiTextSecondary,
+            TextAlign = ContentAlignment.TopRight,
+            RightToLeft = RightToLeft.Yes,
+            AutoSize = true,
+            Margin = new Padding(0, 2, 0, 0),
+            UseCompatibleTextRendering = false
+        }, 0, 1);
+        cartHead.Controls.Add(cartHeadText);
 
         // Remove button
         var removeBar = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 30,
+            Height = 36,
             BackColor = Color.FromArgb(254, 245, 245)
         };
-        removeBar.Paint += BorderBottom;
+        removeBar.Paint += (s, e) =>
+        {
+            BorderBottom(s, e);
+            if (s is Control c)
+            {
+                using var pen = new Pen(Color.FromArgb(252, 214, 214));
+                e.Graphics.DrawLine(pen, 0, 0, c.Width, 0);
+            }
+        };
         var removeBtn = new Button
         {
             Text = "× إزالة الصنف المحدد",
@@ -159,7 +296,7 @@ public partial class MainForm
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(254, 235, 235),
             ForeColor = Color.FromArgb(180, 28, 28),
-            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 10.5f, FontStyle.Bold, GraphicsUnit.Point),
             Cursor = Cursors.Hand,
             RightToLeft = RightToLeft.Yes,
             UseCompatibleTextRendering = false
@@ -169,15 +306,15 @@ public partial class MainForm
         removeBtn.Click += (_, _) => RemoveSelectedCartItem();
         removeBar.Controls.Add(removeBtn);
 
-        // Cart grid
-        StyleGrid(_cartGrid);
+        // Cart grid — same RTL/header treatment as report grids
+        StyleReportGrid(_cartGrid);
         _cartGrid.Dock = DockStyle.Fill;
         _cartGrid.DataSource = _cartBinding;
         _cartGrid.BackgroundColor = Color.White;
-        _cartGrid.RowTemplate.Height = 36;
-        _cartGrid.Font = new Font("Segoe UI", 10f);
-        _cartGrid.DefaultCellStyle.Padding = new Padding(6, 3, 6, 3);
-        _cartGrid.BorderStyle = BorderStyle.None;
+        _cartGrid.RowTemplate.Height = 46;
+        _cartGrid.Font = new Font("Segoe UI", 11.5f, FontStyle.Regular, GraphicsUnit.Point);
+        _cartGrid.DefaultCellStyle.Padding = new Padding(8, 5, 8, 5);
+        _cartGrid.BorderStyle = BorderStyle.FixedSingle;
         _cartGrid.GridColor = Color.FromArgb(230, 232, 236);
         _cartGrid.RightToLeft = RightToLeft.Yes;
         _cartGrid.AutoGenerateColumns = false;
@@ -188,37 +325,112 @@ public partial class MainForm
         {
             DataPropertyName = nameof(CartRow.ProductName),
             HeaderText = "الصنف", ReadOnly = true,
-            FillWeight = 40, MinimumWidth = 80
+            FillWeight = 38, MinimumWidth = 110
         });
         _cartGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             DataPropertyName = nameof(CartRow.Quantity),
-            HeaderText = "الكمية", FillWeight = 20, MinimumWidth = 58,
+            HeaderText = "الكمية", FillWeight = 18, MinimumWidth = 76,
             DefaultCellStyle = new DataGridViewCellStyle
                 { Format = "N3", Alignment = DataGridViewContentAlignment.MiddleRight }
         });
         _cartGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             DataPropertyName = nameof(CartRow.UnitPrice),
-            HeaderText = "السعر", ReadOnly = true,
-            FillWeight = 20, MinimumWidth = 64,
+            HeaderText = "سعر الوحدة", ReadOnly = true,
+            FillWeight = 22, MinimumWidth = 108,
             DefaultCellStyle = new DataGridViewCellStyle
                 { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight }
         });
         _cartGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             DataPropertyName = nameof(CartRow.LineTotal),
-            HeaderText = "الإجمالي", ReadOnly = true,
-            FillWeight = 22, MinimumWidth = 72,
+            HeaderText = "صافي السطر", ReadOnly = true,
+            FillWeight = 24, MinimumWidth = 118,
             DefaultCellStyle = new DataGridViewCellStyle
-                { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight }
+            {
+                Format = "N2",
+                Alignment = DataGridViewContentAlignment.MiddleRight,
+                Font = new Font("Segoe UI", 11.5f, FontStyle.Bold, GraphicsUnit.Point)
+            }
+        });
+        _cartGrid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 11f, FontStyle.Bold, GraphicsUnit.Point);
+        _cartGrid.ColumnHeadersHeight = 48;
+        _cartGrid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(252, 253, 255);
+        _cartGrid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(224, 236, 255);
+        _cartGrid.DefaultCellStyle.SelectionForeColor = UiTextPrimary;
+
+        // Cart line-items zone: caption + bordered host so empty cart is not a blank void.
+        var cartLinesLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            BackColor = Color.FromArgb(238, 242, 248),
+            Padding = new Padding(8, 8, 8, 8),
+            RightToLeft = RightToLeft.Yes
+        };
+        cartLinesLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40f));
+        cartLinesLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        cartLinesLayout.MinimumSize = new Size(0, 140);
+
+        var cartTableCaption = new Label
+        {
+            Text = "جدول أسطر السلة — الصنف، الكمية، سعر الوحدة، صافي السطر",
+            Dock = DockStyle.Fill,
+            Font = new Font(UiFont.FontFamily, 10.75f, FontStyle.Bold, GraphicsUnit.Point),
+            ForeColor = UiTextSecondary,
+            TextAlign = ContentAlignment.MiddleRight,
+            BackColor = Color.FromArgb(248, 250, 252),
+            Padding = new Padding(10, 8, 10, 8),
+            RightToLeft = RightToLeft.Yes,
+            UseCompatibleTextRendering = false
+        };
+        cartTableCaption.Paint += (s, e) =>
+        {
+            if (s is not Control c) return;
+            using var pen = new Pen(Color.FromArgb(200, 208, 220));
+            e.Graphics.DrawLine(pen, 0, c.Height - 1, c.Width, c.Height - 1);
+        };
+        cartLinesLayout.Controls.Add(cartTableCaption, 0, 0);
+
+        var cartGridHost = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.FromArgb(186, 196, 210),
+            Padding = new Padding(1)
+        };
+
+        var cartEmptyOverlay = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.FromArgb(248, 250, 252),
+            Visible = true
+        };
+        cartEmptyOverlay.Controls.Add(new Label
+        {
+            Text = "السلة فارغة.\nاضغط + بجانب أحد المنتجات لإضافته هنا.",
+            Dock = DockStyle.Fill,
+            Font = new Font(UiFont.FontFamily, 11f, FontStyle.Italic, GraphicsUnit.Point),
+            ForeColor = UiTextSecondary,
+            TextAlign = ContentAlignment.MiddleCenter,
+            RightToLeft = RightToLeft.Yes,
+            Padding = new Padding(12),
+            UseCompatibleTextRendering = false
         });
 
-        // Bottom area — Dock=Top stacking: first added sits at top (customer → pay → oil at bottom).
+        _posCartEmptyOverlay = cartEmptyOverlay;
+        _cartBinding.ListChanged += (_, _) => SyncPosCartEmptyOverlay();
+
+        cartGridHost.Controls.Add(_cartGrid);
+        cartGridHost.Controls.Add(cartEmptyOverlay);
+        cartLinesLayout.Controls.Add(cartGridHost, 0, 1);
+
+        // Bottom area — Dock=Top stacking: first added at top (عميل → خصم → ملخص → تنبيه قبل الدفع → زر الدفع).
         var cartBottom = new Panel
         {
             Dock = DockStyle.Bottom,
-            Height = 222,
+            Height = 278,
             BackColor = Color.White,
             Padding = new Padding(10, 8, 10, 8)
         };
@@ -229,14 +441,14 @@ public partial class MainForm
         var custTbl = BuildTwoColRow("العميل:");
         _posCustomerCombo.Dock = DockStyle.Fill;
         _posCustomerCombo.Font = UiFont;
-        _posCustomerCombo.Height = 28;
+        _posCustomerCombo.Height = 30;
         custTbl.Controls.Add(_posCustomerCombo, 1, 0);
 
         // Discount row
         var discTbl = BuildTwoColRow("خصم:");
         _posDiscount.Dock = DockStyle.Fill;
         _posDiscount.Font = UiFont;
-        _posDiscount.Height = 28;
+        _posDiscount.Height = 30;
         _posDiscount.DecimalPlaces = 2;
         _posDiscount.Maximum = 100000;
         _posDiscount.ValueChanged += (_, _) => RefreshCartSummary();
@@ -256,38 +468,64 @@ public partial class MainForm
             e.Graphics.DrawRectangle(pen, 0, 0, sumBox.Width - 1, sumBox.Height - 1);
         };
 
-        // Summary rows inside sumBox using absolute layout
-        void AddSumRow(string lbl, Label val, int top, bool big = false)
-        {
-            var l = new Label
-            {
-                Text = lbl,
-                Font = big ? new Font("Segoe UI", 10f, FontStyle.Bold) : UiFont,
-                ForeColor = Color.FromArgb(100, 100, 110),
-                TextAlign = ContentAlignment.MiddleRight,
-                RightToLeft = RightToLeft.Yes,
-                Bounds = new Rectangle(sumBox.Width - 140, top, 128, 22)
-            };
-            l.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            val.Font = big ? new Font("Segoe UI", 14f, FontStyle.Bold) : UiFont;
-            val.ForeColor = big ? Color.FromArgb(27, 94, 32) : Color.FromArgb(30, 30, 30);
-            val.TextAlign = ContentAlignment.MiddleLeft;
-            val.Bounds = new Rectangle(8, top, 100, 22);
-            val.Anchor = AnchorStyles.Top | AnchorStyles.Left;
-            sumBox.Controls.Add(l);
-            sumBox.Controls.Add(val);
-        }
-
         _subtotalValueLabel.ForeColor = Color.FromArgb(30, 30, 30);
         _discountValueLabel.ForeColor = Color.FromArgb(192, 57, 43);
         _totalValueLabel.ForeColor = Color.FromArgb(27, 94, 32);
 
-        sumBox.HandleCreated += (_, _) =>
+        static void StyleSumValueCell(Label val, Font font)
         {
-            sumBox.Controls.Clear();
-            AddSumRow("المجموع الفرعي:", _subtotalValueLabel, 6);
-            AddSumRow("الخصم:", _discountValueLabel, 26);
-            AddSumRow("الإجمالي:", _totalValueLabel, 46, big: true);
+            val.AutoSize = false;
+            val.Dock = DockStyle.Fill;
+            val.Font = font;
+            val.TextAlign = ContentAlignment.MiddleRight;
+            val.RightToLeft = RightToLeft.Yes;
+            val.UseCompatibleTextRendering = false;
+        }
+
+        var sumTbl = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 3,
+            RightToLeft = RightToLeft.Yes,
+            Padding = new Padding(4, 2, 4, 2),
+            BackColor = Color.FromArgb(247, 249, 251)
+        };
+        sumTbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40f));
+        sumTbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60f));
+        sumTbl.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33f));
+        sumTbl.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33f));
+        sumTbl.RowStyles.Add(new RowStyle(SizeType.Percent, 33.34f));
+
+        static Label SumCaption(string text) => new()
+        {
+            Text = text,
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI", 11f, FontStyle.Regular, GraphicsUnit.Point),
+            ForeColor = Color.FromArgb(100, 100, 110),
+            TextAlign = ContentAlignment.MiddleRight,
+            RightToLeft = RightToLeft.Yes,
+            UseCompatibleTextRendering = false
+        };
+
+        StyleSumValueCell(_subtotalValueLabel, new Font("Segoe UI", 11.5f, FontStyle.Bold, GraphicsUnit.Point));
+        StyleSumValueCell(_discountValueLabel, new Font("Segoe UI", 11.5f, FontStyle.Bold, GraphicsUnit.Point));
+        StyleSumValueCell(_totalValueLabel, new Font("Segoe UI", 15f, FontStyle.Bold, GraphicsUnit.Point));
+
+        sumTbl.Controls.Add(SumCaption("المجموع الفرعي:"), 0, 0);
+        sumTbl.Controls.Add(_subtotalValueLabel, 1, 0);
+        sumTbl.Controls.Add(SumCaption("الخصم:"), 0, 1);
+        sumTbl.Controls.Add(_discountValueLabel, 1, 1);
+        sumTbl.Controls.Add(SumCaption("الإجمالي:"), 0, 2);
+        sumTbl.Controls.Add(_totalValueLabel, 1, 2);
+        sumBox.Controls.Add(sumTbl);
+
+        _posCartQuickSummary.Paint += (s, e) =>
+        {
+            if (s is not Control c) return;
+            using var pen = new Pen(Color.FromArgb(170, 200, 220));
+            e.Graphics.DrawLine(pen, 0, 0, c.Width, 0);
+            e.Graphics.DrawLine(pen, 0, c.Height - 1, c.Width, c.Height - 1);
         };
 
         // Pay button
@@ -295,11 +533,11 @@ public partial class MainForm
         {
             Text = "دفع وإصدار الفاتورة",
             Dock = DockStyle.Top,
-            Height = 40,
+            Height = 48,
             BackColor = Color.FromArgb(39, 174, 96),
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 12f, FontStyle.Bold, GraphicsUnit.Point),
             Cursor = Cursors.Hand,
             RightToLeft = RightToLeft.Yes,
             UseCompatibleTextRendering = false,
@@ -308,99 +546,89 @@ public partial class MainForm
         payBtn.FlatAppearance.BorderSize = 0;
         payBtn.Click += async (_, _) => await CompleteSaleAsync();
 
-        // Oil change row
-        var oilRow = new Panel
-        {
-            Dock = DockStyle.Top,
-            Height = 32,
-            BackColor = Color.White,
-            Margin = new Padding(0, 2, 0, 0)
-        };
-
-        var oilBtn = new Button
-        {
-            Text = "خدمة تغيير الزيت",
-            Width = 130,
-            Height = 28,
-            BackColor = Color.FromArgb(33, 150, 243),
-            ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-            Cursor = Cursors.Hand,
-            Left = 2,
-            Top = 2,
-            UseCompatibleTextRendering = false
-        };
-        oilBtn.FlatAppearance.BorderSize = 0;
-        oilBtn.Click += async (_, _) => await CompleteOilChangeServiceAsync();
-
-        _oilChangeCustomerId.Width = 52; _oilChangeCustomerId.Height = 28; _oilChangeCustomerId.Top = 2; _oilChangeCustomerId.Left = 136; _oilChangeCustomerId.Minimum = 1; _oilChangeCustomerId.Maximum = 999999;
-        _oilChangeCarId.Width = 52; _oilChangeCarId.Height = 28; _oilChangeCarId.Top = 2; _oilChangeCarId.Left = 194; _oilChangeCarId.Minimum = 1; _oilChangeCarId.Maximum = 999999;
-        _oilChangeOdometer.Width = 64; _oilChangeOdometer.Height = 28; _oilChangeOdometer.Top = 2; _oilChangeOdometer.Left = 252; _oilChangeOdometer.Minimum = 0; _oilChangeOdometer.Maximum = 999999;
-
-        var oilCustLbl = new Label { Text = "زبون", Left = 136, Top = 6, Width = 0, AutoSize = true, Font = new Font("Segoe UI", 8f), ForeColor = UiTextSecondary };
-        var oilCarLbl = new Label { Text = "سيارة", Left = 194, Top = 6, Width = 0, AutoSize = true, Font = new Font("Segoe UI", 8f), ForeColor = UiTextSecondary };
-        var oilOdoLbl = new Label { Text = "عداد", Left = 252, Top = 6, Width = 0, AutoSize = true, Font = new Font("Segoe UI", 8f), ForeColor = UiTextSecondary };
-
-        // Reposition labels above spinners
-        void LayoutOil(object? _, EventArgs __)
-        {
-            oilCustLbl.Left = _oilChangeCustomerId.Left;
-            oilCarLbl.Left = _oilChangeCarId.Left;
-            oilOdoLbl.Left = _oilChangeOdometer.Left;
-        }
-
-        oilRow.HandleCreated += LayoutOil;
-
-        oilRow.Controls.AddRange(new Control[]
-        {
-            oilBtn,
-            _oilChangeCustomerId, _oilChangeCarId, _oilChangeOdometer
-        });
-
         cartBottom.Controls.Add(custTbl);
         cartBottom.Controls.Add(discTbl);
         cartBottom.Controls.Add(sumBox);
+        cartBottom.Controls.Add(_posCartQuickSummary);
         cartBottom.Controls.Add(payBtn);
-        cartBottom.Controls.Add(oilRow);
 
         cartCard.Controls.Add(cartBottom);
-        cartCard.Controls.Add(_cartGrid);
+        cartCard.Controls.Add(cartLinesLayout);
         cartCard.Controls.Add(removeBar);
         cartCard.Controls.Add(cartHead);
-        cartOuter.Controls.Add(cartCard);
-
-        // ══════════════════════════════════════════════════════════════════════
-        // 3. PRODUCT PANEL  (Dock=Fill — fills whatever space remains after cart)
-        // ══════════════════════════════════════════════════════════════════════
-        var prodOuter = new Panel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Color.FromArgb(243, 245, 248),
-            Padding = new Padding(0, 0, 8, 0)
-        };
+        cartModule.Controls.Add(cartCard);
 
         var prodCard = BuildCard();
         prodCard.Dock = DockStyle.Fill;
 
-        // Single filter strip: branch | quantity | categories | search (flex) — one visual row like the KPI strip.
+        var prodHeader = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 56,
+            BackColor = Color.White
+        };
+        prodHeader.Paint += (s, e) =>
+        {
+            if (s is not Control c) return;
+            using var accent = new SolidBrush(Color.FromArgb(41, 128, 185));
+            e.Graphics.FillRectangle(accent, c.Width - 4, 0, 4, c.Height);
+            using var line = new Pen(Color.FromArgb(218, 222, 230));
+            e.Graphics.DrawLine(line, 0, c.Height - 1, c.Width, c.Height - 1);
+        };
+        var prodHeaderText = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(12, 6, 14, 6),
+            BackColor = Color.White,
+            RightToLeft = RightToLeft.Yes
+        };
+        prodHeaderText.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        prodHeaderText.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        prodHeaderText.Controls.Add(new Label
+        {
+            Text = "الأصناف المتاحة",
+            Dock = DockStyle.Fill,
+            Font = UiFontSection,
+            ForeColor = UiTextPrimary,
+            TextAlign = ContentAlignment.MiddleRight,
+            RightToLeft = RightToLeft.Yes,
+            AutoSize = true,
+            UseCompatibleTextRendering = false
+        }, 0, 0);
+        prodHeaderText.Controls.Add(new Label
+        {
+            Text = "يُعرض فقط ما له رصيد في الفرع المختار. استخدم البحث والتصنيف ثم + لإضافة الكمية المعروضة.",
+            Dock = DockStyle.Fill,
+            Font = new Font(UiFont.FontFamily, 10.25f, FontStyle.Regular, GraphicsUnit.Point),
+            ForeColor = UiTextSecondary,
+            TextAlign = ContentAlignment.TopRight,
+            RightToLeft = RightToLeft.Yes,
+            AutoSize = true,
+            Margin = new Padding(0, 2, 0, 0),
+            UseCompatibleTextRendering = false
+        }, 0, 1);
+        prodHeader.Controls.Add(prodHeaderText);
+
+        // Filter strip (reports-style toolbar: light panel + border)
         var filterStrip = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 44,
+            Height = 56,
             ColumnCount = 4,
             RowCount = 1,
-            BackColor = Color.White,
+            BackColor = Color.FromArgb(252, 253, 255),
+            BorderStyle = BorderStyle.FixedSingle,
             RightToLeft = RightToLeft.Yes,
-            Padding = new Padding(8, 6, 8, 6),
-            Margin = Padding.Empty
+            Padding = new Padding(12, 10, 12, 10),
+            Margin = new Padding(10, 0, 10, 10)
         };
         filterStrip.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 198f));
         filterStrip.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112f));
         filterStrip.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 232f));
         filterStrip.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
         filterStrip.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-        filterStrip.Paint += BorderBottom;
 
         var branchCell = new FlowLayoutPanel
         {
@@ -410,19 +638,19 @@ public partial class MainForm
             AutoSize = false,
             Padding = new Padding(0, 2, 0, 0),
             Margin = Padding.Empty,
-            BackColor = Color.White
+            BackColor = Color.Transparent
         };
         branchCell.Controls.Add(new Label
         {
             Text = "الفرع:",
             AutoSize = true,
             Font = UiFontCaption,
-            ForeColor = UiTextSecondary,
+            ForeColor = UiTextPrimary,
             Padding = new Padding(0, 4, 6, 0),
             Margin = new Padding(0, 0, 0, 0)
         });
         _posWarehouseCombo.Width = 148;
-        _posWarehouseCombo.Height = 28;
+        _posWarehouseCombo.Height = 30;
         _posWarehouseCombo.Font = UiFont;
         _posWarehouseCombo.Margin = new Padding(0, 0, 0, 0);
         branchCell.Controls.Add(_posWarehouseCombo);
@@ -433,18 +661,18 @@ public partial class MainForm
             FlowDirection = FlowDirection.RightToLeft,
             WrapContents = false,
             Padding = new Padding(0, 2, 0, 0),
-            BackColor = Color.White
+            BackColor = Color.Transparent
         };
         qtyCell.Controls.Add(new Label
         {
             Text = "الكمية:",
             AutoSize = true,
             Font = UiFontCaption,
-            ForeColor = UiTextSecondary,
+            ForeColor = UiTextPrimary,
             Padding = new Padding(0, 4, 6, 0)
         });
         _posAddQty.Width = 74;
-        _posAddQty.Height = 28;
+        _posAddQty.Height = 30;
         _posAddQty.Margin = new Padding(0, 0, 0, 0);
         _posAddQty.Font = UiFont;
         _posAddQty.DecimalPlaces = 3;
@@ -454,15 +682,15 @@ public partial class MainForm
         _categoryPanel.Dock = DockStyle.Fill;
         _categoryPanel.Margin = new Padding(0);
         _categoryPanel.Padding = new Padding(2, 2, 2, 0);
-        _categoryPanel.BackColor = Color.White;
+        _categoryPanel.BackColor = Color.Transparent;
         _categoryPanel.FlowDirection = FlowDirection.RightToLeft;
         _categoryPanel.WrapContents = false;
         _categoryPanel.AutoScroll = true;
         _categoryPanel.Height = 30;
 
-        var searchHost = new Panel { Dock = DockStyle.Fill, Padding = new Padding(6, 0, 0, 0), BackColor = Color.White };
+        var searchHost = new Panel { Dock = DockStyle.Fill, Padding = new Padding(6, 0, 0, 0), BackColor = Color.Transparent };
         _posSearchBox.Dock = DockStyle.Fill;
-        _posSearchBox.MinimumSize = new Size(120, 26);
+        _posSearchBox.MinimumSize = new Size(120, 28);
         _posSearchBox.Font = UiFont;
         _posSearchBox.PlaceholderText = "بحث عن صنف...";
         _posSearchBox.TextChanged += (_, _) => RenderProductCards();
@@ -473,22 +701,25 @@ public partial class MainForm
         filterStrip.Controls.Add(_categoryPanel, 2, 0);
         filterStrip.Controls.Add(searchHost, 3, 0);
 
-        // Product cards scroll
+        // Product cards scroll — distinct content well from toolbar (reports module body tone)
         _productCardsPanel.Dock = DockStyle.Fill;
         _productCardsPanel.AutoScroll = true;
         _productCardsPanel.WrapContents = true;
-        _productCardsPanel.Padding = new Padding(8, 8, 8, 8);
-        _productCardsPanel.BackColor = Color.FromArgb(247, 248, 250);
+        _productCardsPanel.Padding = new Padding(14, 14, 14, 16);
+        _productCardsPanel.BackColor = Color.FromArgb(248, 249, 252);
 
-        prodCard.Controls.Add(filterStrip);
         prodCard.Controls.Add(_productCardsPanel);
-        prodOuter.Controls.Add(prodCard);
+        prodCard.Controls.Add(filterStrip);
+        prodCard.Controls.Add(prodHeader);
+        prodModule.Controls.Add(prodCard);
 
-        // ── Assemble host ──────────────────────────────────────────────────────
-        // ORDER MATTERS for Dock: add Right BEFORE Fill
-        host.Controls.Add(prodOuter); // Fill — must be last
-        host.Controls.Add(cartOuter); // Right — must be before Fill
-        host.Controls.Add(kpiPanel); // Top
+        mainSplit.Controls.Add(cartModule, 0, 0);
+        mainSplit.Controls.Add(prodModule, 1, 0);
+        workspace.Controls.Add(mainSplit);
+
+        // ── Assemble host: top chrome first, then Fill workspace ─────────────────
+        host.Controls.Add(posTopBundle);
+        host.Controls.Add(workspace);
 
         tab.Controls.Add(host);
         return tab;
@@ -675,6 +906,27 @@ public partial class MainForm
         _subtotalValueLabel.Text = subtotal.ToString("n2");
         _discountValueLabel.Text = _posDiscount.Value.ToString("n2");
         _totalValueLabel.Text = total.ToString("n2");
+
+        _posCartQuickSummary.Text = cart.Count == 0
+            ? "لا توجد أصناف في السلة بعد."
+            : cart.Count == 1
+                ? $"صنف واحد  ·  فرعي {subtotal:n2}{UiCurrencySuffix}  ·  للدفع {total:n2}{UiCurrencySuffix}"
+                : $"{cart.Count} أصناف  ·  فرعي {subtotal:n2}{UiCurrencySuffix}  ·  للدفع {total:n2}{UiCurrencySuffix}";
+
+        SyncPosCartEmptyOverlay();
+    }
+
+    private void SyncPosCartEmptyOverlay()
+    {
+        if (_posCartEmptyOverlay is null) return;
+        try
+        {
+            _posCartEmptyOverlay.Visible = _cartBinding.Count == 0;
+        }
+        catch
+        {
+            // ignore: cart list may be transiently invalid during DataSource swaps
+        }
     }
     private string ProductImagesMapPath => Path.Combine(AppContext.BaseDirectory, "product-images-map.json");
 
@@ -716,167 +968,6 @@ public partial class MainForm
         dialog.ShowDialog(this);
     }
 
-    private Panel BuildSummaryPanel()
-    {
-        var panel = new Panel
-        {
-            Dock = DockStyle.Bottom,
-            Height = 140,
-            BackColor = Color.FromArgb(236, 240, 241),
-            Padding = new Padding(12)
-        };
-
-        var table = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 3,
-            RightToLeft = RightToLeft.Yes
-        };
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (var i = 0; i < 3; i++) table.RowStyles.Add(new RowStyle(SizeType.Percent, 33.3f));
-
-        _subtotalValueLabel.TextAlign = ContentAlignment.MiddleRight;
-        _discountValueLabel.TextAlign = ContentAlignment.MiddleRight;
-        _totalValueLabel.TextAlign = ContentAlignment.MiddleRight;
-        table.Controls.Add(new Label { Text = "المجموع الفرعي", AutoSize = true, Font = UiFontCaption, ForeColor = UiTextPrimary, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.Yes }, 0, 0);
-        table.Controls.Add(_subtotalValueLabel, 1, 0);
-        table.Controls.Add(new Label { Text = "الخصم", AutoSize = true, Font = UiFontCaption, ForeColor = UiTextPrimary, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.Yes }, 0, 1);
-        table.Controls.Add(_discountValueLabel, 1, 1);
-        table.Controls.Add(new Label { Text = "الإجمالي", AutoSize = true, Font = UiFontSection, ForeColor = UiTextPrimary, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.Yes }, 0, 2);
-        table.Controls.Add(_totalValueLabel, 1, 2);
-
-        panel.Controls.Add(table);
-        return panel;
-    }
-
-    private Panel BuildSubmitPanel()
-    {
-        var panel = new Panel
-        {
-            Dock = DockStyle.Bottom,
-            Height = 170,
-            BackColor = Color.White,
-            Padding = new Padding(12, 8, 12, 10)
-        };
-
-        var font = UiFontCaption;
-        var posCustomerRow = new Panel { Dock = DockStyle.Top, Height = 44 };
-        posCustomerRow.Controls.Add(new Label
-        {
-            Text = "عميل الفاتورة",
-            Left = 0,
-            Top = 12,
-            Width = 124,
-            Height = 22,
-            Font = font,
-            ForeColor = UiTextPrimary,
-            TextAlign = ContentAlignment.MiddleRight,
-            RightToLeft = RightToLeft.Yes
-        });
-        _posCustomerCombo.Left = 128;
-        _posCustomerCombo.Top = 8;
-        _posCustomerCombo.Width = 292;
-        _posCustomerCombo.Height = 28;
-        posCustomerRow.Controls.Add(_posCustomerCombo);
-
-        var oilRow = new Panel { Dock = DockStyle.Top, Height = 46 };
-        var customerLbl = new Label { Text = "رقم الزبون", Left = 0, Top = 12, Width = 78, Height = 22, Font = font, ForeColor = UiTextPrimary, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.Yes };
-        _oilChangeCustomerId.Left = 80;
-        _oilChangeCustomerId.Top = 8;
-        _oilChangeCustomerId.Height = 26;
-        var carLbl = new Label { Text = "رقم السيارة", Left = 162, Top = 12, Width = 88, Height = 22, Font = font, ForeColor = UiTextPrimary, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.Yes };
-        _oilChangeCarId.Left = 252;
-        _oilChangeCarId.Top = 8;
-        _oilChangeCarId.Height = 26;
-        var odoLbl = new Label { Text = "عداد المسافة", Left = 334, Top = 12, Width = 96, Height = 22, Font = font, ForeColor = UiTextPrimary, TextAlign = ContentAlignment.MiddleRight, RightToLeft = RightToLeft.Yes };
-        _oilChangeOdometer.Left = 432;
-        _oilChangeOdometer.Top = 8;
-        _oilChangeOdometer.Height = 26;
-        var oilBtn = BuildButton("خدمة تغيير الزيت", Color.FromArgb(41, 128, 185));
-        oilBtn.Width = 180;
-        oilBtn.Height = 34;
-        oilBtn.Left = 530;
-        oilBtn.Top = 6;
-        oilBtn.Click += async (_, _) => await CompleteOilChangeServiceAsync();
-        oilRow.Controls.Add(customerLbl);
-        oilRow.Controls.Add(_oilChangeCustomerId);
-        oilRow.Controls.Add(carLbl);
-        oilRow.Controls.Add(_oilChangeCarId);
-        oilRow.Controls.Add(odoLbl);
-        oilRow.Controls.Add(_oilChangeOdometer);
-        oilRow.Controls.Add(oilBtn);
-
-        var payRow = new Panel { Dock = DockStyle.Top, Height = 52 };
-        var submit = BuildButton("دفع", Color.FromArgb(39, 174, 96));
-        submit.Width = 230;
-        submit.Height = 44;
-        submit.Anchor = AnchorStyles.Right | AnchorStyles.Top;
-        submit.Left = payRow.Width - submit.Width - 4;
-        submit.Top = 4;
-        submit.Click += async (_, _) => await CompleteSaleAsync();
-        payRow.Controls.Add(submit);
-        payRow.Resize += (_, _) => submit.Left = payRow.Width - submit.Width - 4;
-
-        panel.Controls.Add(payRow);
-        panel.Controls.Add(oilRow);
-        panel.Controls.Add(posCustomerRow);
-        return panel;
-    }
-
-    private async Task CompleteOilChangeServiceAsync()
-    {
-        var (whOk, warehouseId) = await TryResolvePosSaleWarehouseIdAsync();
-        if (!whOk)
-        {
-            MessageBox.Show(
-                "اختر المستودع قبل تسجيل خدمة تغيير الزيت (نفس قائمة نقطة البيع).",
-                "مستودع مطلوب",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning,
-                MessageBoxDefaultButton.Button1,
-                MsgRtl);
-            return;
-        }
-
-        var cart = _cartBinding.List.Cast<CartRow>().ToList();
-        if (!cart.Any())
-        {
-            MessageBox.Show("أضف أصنافاً للسلة أولاً.", "سلة فارغة", MessageBoxButtons.OK, MessageBoxIcon.Information,
-                MessageBoxDefaultButton.Button1, MsgRtl);
-            return;
-        }
-
-        var customerId = (int)_oilChangeCustomerId.Value;
-        var carId = (int)_oilChangeCarId.Value;
-        var odometerKm = (int)_oilChangeOdometer.Value;
-
-        var details = cart.Select(x => new SaleItemRequest(x.ProductId, x.Quantity)).ToList();
-
-        try
-        {
-            var serviceId = await _serviceOrderService.CreateOilChangeServiceAsync(
-                new OilChangeRequest(customerId, carId, odometerKm, _currentUser.Id, warehouseId, details));
-            MessageBox.Show(
-                $"تم حفظ خدمة تغيير الزيت. رقم الخدمة: {serviceId}",
-                "تم",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information,
-                MessageBoxDefaultButton.Button1,
-                MsgRtl);
-            _cartBinding.DataSource = new List<CartRow>();
-            RefreshCartSummary();
-            await RefreshAllStockViewsAsync();
-            await RefreshDailyKpisAsync();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(ex.Message, "فشل خدمة تغيير الزيت", MessageBoxButtons.OK, MessageBoxIcon.Error,
-                MessageBoxDefaultButton.Button1, MsgRtl);
-        }
-    }
-
     // ════════════════════════════════════════════════════════════════════════════
     // PRODUCT CARDS RENDERER — 190px wide cards, 3+ per row, price visible
     // Replace the entire body of RenderProductCards()
@@ -904,13 +995,13 @@ public partial class MainForm
         {
             bool isLow = p.AvailableStock > 0 && p.AvailableStock <= 5;
             bool outStock = p.AvailableStock <= 0;
-            var borderClr = isLow ? Color.FromArgb(251, 140, 0) : Color.FromArgb(214, 218, 226);
+            var borderClr = isLow ? Color.FromArgb(251, 140, 0) : Color.FromArgb(218, 222, 230);
 
             var card = new Panel
             {
-                Width = 190,
-                Height = 166,
-                Margin = new Padding(5),
+                Width = 204,
+                Height = 190,
+                Margin = new Padding(7, 7, 7, 10),
                 BackColor = Color.White
             };
             card.Paint += (s, e) =>
@@ -922,8 +1013,8 @@ public partial class MainForm
             // Image placeholder
             var img = new PictureBox
             {
-                Bounds = new Rectangle(1, 1, 188, 72),
-                BackColor = Color.FromArgb(238, 242, 248),
+                Bounds = new Rectangle(1, 1, 202, 76),
+                BackColor = Color.FromArgb(236, 242, 250),
                 SizeMode = PictureBoxSizeMode.Zoom
             };
             if (_productImageMap.TryGetValue(p.ProductId, out var imgPath) && File.Exists(imgPath))
@@ -951,8 +1042,8 @@ public partial class MainForm
             var nameLbl = new Label
             {
                 Text = p.DisplayTitle,
-                Bounds = new Rectangle(8, 76, 174, 32),
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                Bounds = new Rectangle(8, 80, 188, 38),
+                Font = new Font("Segoe UI", 11.25f, FontStyle.Bold, GraphicsUnit.Point),
                 ForeColor = Color.FromArgb(25, 25, 35),
                 RightToLeft = RightToLeft.Yes,
                 TextAlign = ContentAlignment.TopRight
@@ -961,10 +1052,10 @@ public partial class MainForm
             // Price
             var priceLbl = new Label
             {
-                Text = $"{p.UnitPrice:n2} ر.س",
-                Bounds = new Rectangle(8, 108, 174, 20),
-                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(13, 71, 161),
+                Text = $"{p.UnitPrice:n2}{UiCurrencySuffix}",
+                Bounds = new Rectangle(8, 118, 188, 28),
+                Font = new Font("Segoe UI", 12.5f, FontStyle.Bold, GraphicsUnit.Point),
+                ForeColor = Color.FromArgb(41, 128, 185),
                 RightToLeft = RightToLeft.Yes,
                 TextAlign = ContentAlignment.MiddleRight
             };
@@ -980,8 +1071,8 @@ public partial class MainForm
             var stockLbl = new Label
             {
                 Text = stockTxt,
-                Bounds = new Rectangle(8, 130, 134, 18),
-                Font = new Font("Segoe UI", 8.5f),
+                Bounds = new Rectangle(8, 150, 150, 24),
+                Font = new Font("Segoe UI", 10.25f, FontStyle.Regular, GraphicsUnit.Point),
                 ForeColor = stockClr,
                 RightToLeft = RightToLeft.Yes,
                 TextAlign = ContentAlignment.MiddleRight
@@ -991,10 +1082,10 @@ public partial class MainForm
             var addBtn = new Button
             {
                 Text = "+",
-                Bounds = new Rectangle(152, 128, 30, 24),
+                Bounds = new Rectangle(166, 148, 32, 30),
                 FlatStyle = FlatStyle.Flat,
-                BackColor = outStock ? Color.FromArgb(240, 240, 240) : Color.FromArgb(225, 242, 254),
-                ForeColor = outStock ? Color.FromArgb(160, 160, 160) : Color.FromArgb(13, 71, 161),
+                BackColor = outStock ? Color.FromArgb(240, 240, 240) : Color.FromArgb(232, 244, 252),
+                ForeColor = outStock ? Color.FromArgb(160, 160, 160) : Color.FromArgb(41, 128, 185),
                 Font = new Font("Segoe UI", 12f, FontStyle.Bold),
                 Cursor = outStock ? Cursors.Default : Cursors.Hand,
                 Enabled = !outStock,
@@ -1002,7 +1093,7 @@ public partial class MainForm
             };
             addBtn.FlatAppearance.BorderColor = outStock
                 ? Color.FromArgb(210, 210, 210)
-                : Color.FromArgb(179, 229, 252);
+                : Color.FromArgb(174, 214, 241);
             addBtn.FlatAppearance.BorderSize = 1;
             if (!outStock) addBtn.Click += (_, _) => AddProductToCart(p);
 
@@ -1014,11 +1105,13 @@ public partial class MainForm
         {
             _productCardsPanel.Controls.Add(new Label
             {
-                Text = "لا توجد أصناف متاحة.",
+                Text = "لا توجد أصناف مطابقة. جرّب بحثاً آخر أو غيّر التصنيف أو الفرع.",
                 AutoSize = true,
-                Font = new Font("Segoe UI", 11f),
-                ForeColor = Color.FromArgb(190, 190, 196),
-                Margin = new Padding(16)
+                Font = new Font(UiFont.FontFamily, 11.25f, FontStyle.Italic, GraphicsUnit.Point),
+                ForeColor = UiTextSecondary,
+                Margin = new Padding(20, 24, 20, 12),
+                RightToLeft = RightToLeft.Yes,
+                MaximumSize = new Size(Math.Max(260, _productCardsPanel.ClientSize.Width - 48), 0)
             });
         }
 
@@ -1040,14 +1133,17 @@ public partial class MainForm
             var btn = new Button
             {
                 Text = CategoryChipDisplay(category),
-                Height = 26,
+                Height = 34,
                 AutoSize = true,
                 FlatStyle = FlatStyle.Flat,
                 UseVisualStyleBackColor = false,
-                BackColor = _selectedCategory == category ? Color.FromArgb(52, 152, 219) : Color.FromArgb(236, 240, 241),
-                ForeColor = _selectedCategory == category ? Color.White : Color.FromArgb(52, 73, 94)
+                BackColor = _selectedCategory == category ? Color.FromArgb(41, 128, 185) : Color.White,
+                ForeColor = _selectedCategory == category ? Color.White : Color.FromArgb(55, 65, 81),
+                Font = new Font(UiFont.FontFamily, 10.75f, FontStyle.Bold, GraphicsUnit.Point)
             };
-            btn.FlatAppearance.BorderSize = 0;
+            btn.FlatAppearance.BorderSize = _selectedCategory == category ? 0 : 1;
+            btn.FlatAppearance.BorderColor = Color.FromArgb(200, 206, 216);
+            btn.Margin = new Padding(3, 0, 3, 0);
             btn.Click += (_, _) =>
             {
                 _selectedCategory = category;

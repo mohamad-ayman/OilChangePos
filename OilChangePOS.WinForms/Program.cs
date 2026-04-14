@@ -35,7 +35,6 @@ internal static class Program
         services.AddScoped<IInventoryService, InventoryService>();
         services.AddScoped<ITransferService, TransferService>();
         services.AddScoped<ISalesService, SalesService>();
-        services.AddScoped<IServiceOrderService, ServiceOrderService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IExpenseService, ExpenseService>();
         services.AddScoped<ICustomerService, CustomerService>();
@@ -92,7 +91,6 @@ internal static class Program
             using var main = new MainForm(
                 sp.GetRequiredService<IDbContextFactory<OilChangePosDbContext>>(),
                 sp.GetRequiredService<ISalesService>(),
-                sp.GetRequiredService<IServiceOrderService>(),
                 sp.GetRequiredService<IInventoryService>(),
                 sp.GetRequiredService<IReportService>(),
                 sp.GetRequiredService<IExpenseService>(),

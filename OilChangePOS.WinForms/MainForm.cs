@@ -32,11 +32,12 @@ public partial class MainForm : Form
     private static readonly CultureInfo ReportsCulture = CultureInfo.GetCultureInfo("ar-SA");
     private const decimal LowStockThreshold = 5m;
     private const MessageBoxOptions MsgRtl = MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign;
+    /// <summary>Currency label shown next to amounts in POS (Egyptian pound).</summary>
+    private const string UiCurrencySuffix = " ج.م";
     /// <summary>Main Warehouse captions/inputs with this <see cref="Control.Tag"/> skip <see cref="ApplyUnifiedFont"/> so sizes stay readable.</summary>
     private const string MainWarehouseUiLabelTag = "MW_UI";
     private readonly IDbContextFactory<OilChangePosDbContext> _dbFactory;
     private readonly ISalesService _salesService;
-    private readonly IServiceOrderService _serviceOrderService;
     private readonly IInventoryService _inventoryService;
     private readonly IReportService _reportService;
     private readonly IExpenseService _expenseService;
@@ -52,6 +53,8 @@ public partial class MainForm : Form
     private readonly BindingSource _inventoryBinding = new();
     private readonly BindingSource _auditBinding = new();
     private readonly DataGridView _cartGrid = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, ReadOnly = false };
+    /// <summary>POS cart: empty-state overlay panel (shown when <see cref="_cartBinding"/> has no rows).</summary>
+    private Panel? _posCartEmptyOverlay;
     private readonly DataGridView _inventoryGrid = new() { Dock = DockStyle.Fill, AutoGenerateColumns = true };
     private readonly DataGridView _auditGrid = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false };
     private readonly DataGridView _auditHistoryGrid = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, ReadOnly = true };
@@ -112,6 +115,25 @@ public partial class MainForm : Form
     private readonly DataGridView _transferFullGrid = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, ReadOnly = true };
     private readonly DataGridView _cashFlowGrid = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, ReadOnly = true };
     private readonly DataGridView _expenseReportGrid = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, ReadOnly = true };
+    private readonly DataGridView _branchSalesLinesGrid = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, ReadOnly = true };
+    private readonly DataGridView _branchIncomingGrid = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, ReadOnly = true };
+    private readonly DataGridView _branchSellersGrid = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, ReadOnly = true };
+    /// <summary>Branch-user tab: same register grids as admin «حصر الفرع» but bound independently (separate <see cref="TabPage"/>).</summary>
+    private readonly DateTimePicker _branchOnlyFromPicker = new() { Width = 150 };
+    private readonly DateTimePicker _branchOnlyToPicker = new() { Width = 150 };
+    private readonly Label _branchOnlyPeriodBanner = new()
+    {
+        Dock = DockStyle.Top,
+        Height = 40,
+        ForeColor = Color.White,
+        BackColor = Color.FromArgb(44, 62, 80),
+        TextAlign = ContentAlignment.MiddleRight,
+        Padding = new Padding(0, 0, 16, 0),
+        RightToLeft = RightToLeft.Yes
+    };
+    private readonly DataGridView _branchOnlySalesLinesGrid = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, ReadOnly = true };
+    private readonly DataGridView _branchOnlyIncomingGrid = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, ReadOnly = true };
+    private readonly DataGridView _branchOnlySellersGrid = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, ReadOnly = true };
     private readonly NumericUpDown _expenseAmountInput = new() { Width = 120, DecimalPlaces = 2, Maximum = 10000000, Minimum = 0 };
     private readonly TextBox _expenseCategoryInput = new() { Width = 200 };
     private readonly TextBox _expenseDescriptionInput = new() { Width = 320 };
@@ -142,10 +164,30 @@ public partial class MainForm : Form
     private List<InventoryRow> _inventoryRows = [];
     private Dictionary<int, string> _productImageMap = [];
     private readonly FlowLayoutPanel _productCardsPanel = new() { Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true, Padding = new Padding(4) };
-    private readonly TextBox _posSearchBox = new() { Width = 280, PlaceholderText = "بحث عن صنف...", RightToLeft = RightToLeft.Yes };
-    private readonly Label _subtotalValueLabel = new() { AutoSize = true, Font = new Font("Segoe UI", 12, FontStyle.Bold), ForeColor = Color.FromArgb(44, 62, 80) };
-    private readonly Label _discountValueLabel = new() { AutoSize = true, Font = new Font("Segoe UI", 12, FontStyle.Bold), ForeColor = Color.FromArgb(192, 57, 43) };
-    private readonly Label _totalValueLabel = new() { AutoSize = true, Font = new Font("Segoe UI", 16, FontStyle.Bold), ForeColor = Color.FromArgb(39, 174, 96) };
+    private readonly TextBox _posSearchBox = new()
+    {
+        Width = 280,
+        PlaceholderText = "بحث عن صنف...",
+        RightToLeft = RightToLeft.Yes,
+        BorderStyle = BorderStyle.FixedSingle,
+        BackColor = Color.White
+    };
+    private readonly Label _subtotalValueLabel = new() { AutoSize = false, Font = new Font("Segoe UI", 12, FontStyle.Bold), ForeColor = Color.FromArgb(44, 62, 80) };
+    private readonly Label _discountValueLabel = new() { AutoSize = false, Font = new Font("Segoe UI", 12, FontStyle.Bold), ForeColor = Color.FromArgb(192, 57, 43) };
+    private readonly Label _totalValueLabel = new() { AutoSize = false, Font = new Font("Segoe UI", 16, FontStyle.Bold), ForeColor = Color.FromArgb(39, 174, 96) };
+    /// <summary>POS cart: one-line recap (line count + subtotal + payable) above the pay button.</summary>
+    private readonly Label _posCartQuickSummary = new()
+    {
+        Dock = DockStyle.Top,
+        Height = 44,
+        TextAlign = ContentAlignment.MiddleRight,
+        RightToLeft = RightToLeft.Yes,
+        Font = new Font("Segoe UI", 11.25f, FontStyle.Bold, GraphicsUnit.Point),
+        ForeColor = Color.FromArgb(25, 55, 75),
+        BackColor = Color.FromArgb(230, 242, 252),
+        Padding = new Padding(10, 8, 10, 8),
+        UseCompatibleTextRendering = false
+    };
     private readonly ComboBox _inventoryProductCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 280 };
     private readonly NumericUpDown _inventorySetQty = new() { DecimalPlaces = 3, Width = 140, Maximum = 100000 };
     private readonly ComboBox _posWarehouseCombo = new() { Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
@@ -263,9 +305,6 @@ public partial class MainForm : Form
     };
     private readonly NumericUpDown _posAddQty = new() { DecimalPlaces = 3, Width = 130, Minimum = 0.001m, Value = 1, Maximum = 100000 };
     private readonly NumericUpDown _posDiscount = new() { DecimalPlaces = 2, Width = 120, Maximum = 100000 };
-    private readonly NumericUpDown _oilChangeCustomerId = new() { Minimum = 1, Maximum = 999_999, Width = 72 };
-    private readonly NumericUpDown _oilChangeCarId = new() { Minimum = 1, Maximum = 999_999, Width = 72 };
-    private readonly NumericUpDown _oilChangeOdometer = new() { Minimum = 0, Maximum = 999_999, Width = 88 };
     private readonly Label _breadcrumbLabel = new() { Dock = DockStyle.Top, Height = 22, ForeColor = UiTextSecondary, Text = "الرئيسية / الطلب", TextAlign = ContentAlignment.TopRight, RightToLeft = RightToLeft.Yes };
     private readonly Label _orderTitleLabel = new() { Dock = DockStyle.Top, Height = 38, Font = UiFontTitle, ForeColor = UiTextPrimary, Text = "البيع", TextAlign = ContentAlignment.TopRight, RightToLeft = RightToLeft.Yes };
     private readonly FlowLayoutPanel _categoryPanel = new() { Dock = DockStyle.Top, Height = 42, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(0, 4, 0, 0) };
@@ -298,7 +337,6 @@ public partial class MainForm : Form
     public MainForm(
         IDbContextFactory<OilChangePosDbContext> dbFactory,
         ISalesService salesService,
-        IServiceOrderService serviceOrderService,
         IInventoryService inventoryService,
         IReportService reportService,
         IExpenseService expenseService,
@@ -309,7 +347,6 @@ public partial class MainForm : Form
     {
         _dbFactory = dbFactory;
         _salesService = salesService;
-        _serviceOrderService = serviceOrderService;
         _inventoryService = inventoryService;
         _reportService = reportService;
         _expenseService = expenseService;
@@ -389,17 +426,18 @@ public partial class MainForm : Form
 
         if (admin)
         {
-            if (_sidebarNavButtons.Count > 1)
+            if (_sidebarNavButtons.Count > 2)
             {
                 _sidebarNavButtons[0].Visible = false;
                 _sidebarNavButtons[1].Visible = false;
+                _sidebarNavButtons[2].Visible = false;
             }
-            _mainTabs.SelectedIndex = 4;
+            _mainTabs.SelectedIndex = 5;
             ApplySidebarNavHighlight(_mainTabs.SelectedIndex);
             return;
         }
 
-        for (var i = 2; i < _sidebarNavButtons.Count; i++)
+        for (var i = 3; i < _sidebarNavButtons.Count; i++)
             _sidebarNavButtons[i].Visible = false;
 
         _inventoryShowZeroStockCheck.Checked = true;
@@ -414,12 +452,12 @@ public partial class MainForm : Form
     {
         if (_currentUser.Role == UserRole.Admin)
         {
-            if (e.TabPageIndex < 2)
+            if (e.TabPageIndex < 3)
                 e.Cancel = true;
             return;
         }
 
-        if (e.TabPageIndex > 1)
+        if (e.TabPageIndex > 2)
             e.Cancel = true;
     }
 
@@ -463,12 +501,13 @@ public partial class MainForm : Form
 
         menu.Controls.Add(BuildMenuButton("طلب / بيع", 0));
         menu.Controls.Add(BuildMenuButton("المخزون", 1));
-        menu.Controls.Add(BuildMenuButton("الشركات والأصناف", 2));
-        menu.Controls.Add(BuildMenuButton("الفروع", 3));
-        menu.Controls.Add(BuildMenuButton("المستودع الرئيسي", 4));
-        menu.Controls.Add(BuildMenuButton("التحويلات", 5));
-        menu.Controls.Add(BuildMenuButton("جرد المخزون", 6));
-        menu.Controls.Add(BuildMenuButton("التقارير", 7));
+        menu.Controls.Add(BuildMenuButton("تقارير الفرع", 2));
+        menu.Controls.Add(BuildMenuButton("الشركات والأصناف", 3));
+        menu.Controls.Add(BuildMenuButton("الفروع", 4));
+        menu.Controls.Add(BuildMenuButton("المستودع الرئيسي", 5));
+        menu.Controls.Add(BuildMenuButton("التحويلات", 6));
+        menu.Controls.Add(BuildMenuButton("جرد المخزون", 7));
+        menu.Controls.Add(BuildMenuButton("التقارير", 8));
 
         panel.Controls.Add(menu);
         panel.Controls.Add(header);
@@ -546,6 +585,7 @@ public partial class MainForm : Form
 
         _mainTabs.TabPages.Add(BuildPosTab());
         _mainTabs.TabPages.Add(BuildInventoryTab());
+        _mainTabs.TabPages.Add(BuildBranchReportsTab());
         _mainTabs.TabPages.Add(BuildCatalogTab());
         _mainTabs.TabPages.Add(BuildBranchesAdminTab());
         _mainTabs.TabPages.Add(BuildMainWarehouseTab());
@@ -558,7 +598,12 @@ public partial class MainForm : Form
         _mainTabs.RightToLeft = RightToLeft.Yes;
         _mainTabs.RightToLeftLayout = false;
         _mainTabs.Selecting += OnMainTabsSelecting;
-        _mainTabs.SelectedIndexChanged += (_, _) => ApplySidebarNavHighlight(_mainTabs.SelectedIndex);
+        _mainTabs.SelectedIndexChanged += async (_, _) =>
+        {
+            ApplySidebarNavHighlight(_mainTabs.SelectedIndex);
+            if (_mainTabs.SelectedIndex == 2)
+                await RefreshBranchOnlyReportsAsync();
+        };
 
         var tabHost = new Panel
         {
@@ -617,9 +662,9 @@ public partial class MainForm : Form
             if (targetTab < 0 || targetTab >= _mainTabs.TabPages.Count) return;
             if (_currentUser.Role == UserRole.Admin)
             {
-                if (targetTab < 2) return;
+                if (targetTab < 3) return;
             }
-            else if (targetTab > 1)
+            else if (targetTab > 2)
             {
                 return;
             }
@@ -1970,6 +2015,7 @@ public partial class MainForm : Form
                 UpdatePosStockLocationLabel();
                 await RefreshAvailableProductsAsync();
                 await RefreshReportsAsync();
+                await RefreshBranchOnlyReportsAsync();
                 await RefreshDailyKpisAsync();
             };
             _inventoryWarehouseCombo.SelectedIndexChanged += async (_, _) =>
@@ -1977,6 +2023,7 @@ public partial class MainForm : Form
                 await RefreshInventoryAsync();
                 await RefreshAuditViewAsync();
                 await RefreshReportsAsync();
+                await RefreshBranchOnlyReportsAsync();
                 await RefreshAuditHistoryAsync();
             };
         }
@@ -2077,6 +2124,7 @@ public partial class MainForm : Form
         await RefreshAuditViewAsync();
         await RefreshTransferProductsAsync();
         await RefreshReportsAsync();
+        await RefreshBranchOnlyReportsAsync();
     }
 
     private async Task RefreshTransferProductsAsync()
