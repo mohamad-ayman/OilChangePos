@@ -1,3 +1,6 @@
+using OilChangePOS.Business;
+using OilChangePOS.Domain;
+
 namespace OilChangePOS.WinForms;
 
 public partial class MainForm
