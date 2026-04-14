@@ -41,11 +41,11 @@ public partial class MainForm
         var tbl = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 34,
+            Height = 32,
             ColumnCount = 2,
             RowCount = 1,
             BackColor = Color.White,
-            Margin = new Padding(0, 0, 0, 6),
+            Margin = new Padding(0, 0, 0, 4),
             RightToLeft = RightToLeft.No
         };
         tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 50));
@@ -142,14 +142,37 @@ public partial class MainForm
         return p;
     }
 
-    /// <summary>Larger, clearer typography for Main Warehouse action / Excel toolbar buttons.</summary>
-    private static void ApplyMainWarehousePrimaryButtonTypography(Button b)
+    /// <summary>Shared font/padding for warehouse toolbar and form action buttons (Arabic RTL).</summary>
+    private static void ApplyWarehouseActionButtonFont(Button b)
     {
-        // Compact buttons but stay at/above body text size for Arabic clarity.
-        b.Font = new Font("Segoe UI", 10.75f, FontStyle.Bold, GraphicsUnit.Point);
-        b.Padding = new Padding(8, 4, 8, 4);
+        b.Font = new Font("Segoe UI", 9.75f, FontStyle.Bold, GraphicsUnit.Point);
+        b.Padding = new Padding(6, 4, 6, 4);
         b.UseCompatibleTextRendering = false;
         b.RightToLeft = RightToLeft.Yes;
+    }
+
+    private static void SizeWarehouseButtonToFitText(Button b, int minWidth, int maxWidth)
+    {
+        if (string.IsNullOrEmpty(b.Text)) return;
+        var flags = TextFormatFlags.SingleLine | TextFormatFlags.RightToLeft | TextFormatFlags.NoPadding;
+        var tw = TextRenderer.MeasureText(b.Text, b.Font, Size.Empty, flags).Width;
+        var w = tw + b.Padding.Horizontal + 12;
+        w = Math.Max(minWidth, Math.Min(maxWidth, w));
+        b.Width = w;
+    }
+
+    /// <summary>Main warehouse form actions: width follows Arabic text (no clipped labels).</summary>
+    private static void ApplyMainWarehousePrimaryButtonTypography(Button b, int minWidth = 112, int maxWidth = 200)
+    {
+        ApplyWarehouseActionButtonFont(b);
+        SizeWarehouseButtonToFitText(b, minWidth, maxWidth);
+    }
+
+    /// <summary>Excel row on warehouse tab: keep requested pill width, same typography as other actions.</summary>
+    private static void ApplyMainWarehouseFixedToolbarButtonTypography(Button b, int width)
+    {
+        ApplyWarehouseActionButtonFont(b);
+        b.Width = width;
     }
 
     private static void StyleGrid(DataGridView grid)
