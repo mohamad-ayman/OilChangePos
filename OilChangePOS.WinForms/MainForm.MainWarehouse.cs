@@ -162,7 +162,7 @@ public partial class MainForm
         // Do not set Panel*MinSize here — the control often has no real height yet and throws
         // InvalidOperationException. ApplyInitialSplitterDistance applies mins after measuring client size.
         // Favor the grid: keep the purchase form compact by default (Panel1 height ≈ preferred).
-        formGridSplit.HandleCreated += (_, _) => ApplyInitialSplitterDistance(formGridSplit, 198, 110, 120);
+        formGridSplit.HandleCreated += (_, _) => ApplyInitialSplitterDistance(formGridSplit, 168, 110, 120);
 
         var middle = new TableLayoutPanel
         {
@@ -203,6 +203,16 @@ public partial class MainForm
         formShell.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         formShell.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         formShell.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        void RefitMainWarehouseFormPanel()
+        {
+            if (!formGridSplit.IsHandleCreated || formGridSplit.ClientSize.Height <= 0) return;
+            var desired = formShell.PreferredSize.Height + leftCard.Padding.Vertical + 10;
+            var max = Math.Max(120, formGridSplit.ClientSize.Height - 120);
+            var clamped = Math.Clamp(desired, 110, max);
+            if (Math.Abs(formGridSplit.SplitterDistance - clamped) > 2)
+                formGridSplit.SplitterDistance = clamped;
+        }
+        formGridSplit.HandleCreated += (_, _) => BeginInvoke((Action)RefitMainWarehouseFormPanel);
 
         var purchaseHeader = new TableLayoutPanel
         {
@@ -229,26 +239,33 @@ public partial class MainForm
                 Margin = margin,
                 Padding = Padding.Empty,
                 BackColor = Color.White,
-                RightToLeft = RightToLeft.No,
+                RightToLeft = RightToLeft.Yes,
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink
             };
             wrap.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            wrap.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            wrap.RowStyles.Add(new RowStyle(SizeType.Absolute, 18f));
             wrap.RowStyles.Add(new RowStyle(SizeType.Absolute, 26f));
+            var capHost = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.White,
+                RightToLeft = RightToLeft.Yes,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty
+            };
             var cap = new Label
             {
                 Text = caption,
-                AutoSize = true,
+                AutoSize = false,
                 Dock = DockStyle.Fill,
                 Font = new Font(MwFontFieldLabel.FontFamily, 9f, FontStyle.Regular, GraphicsUnit.Point),
                 ForeColor = UiTextSecondary,
                 BackColor = Color.White,
-                TextAlign = ContentAlignment.TopRight,
+                TextAlign = ContentAlignment.MiddleRight,
                 RightToLeft = RightToLeft.Yes,
                 Margin = new Padding(0, 0, 0, 0),
-                Padding = Padding.Empty,
-                MaximumSize = new Size(200, 40),
+                Padding = new Padding(0, 0, 6, 0),
                 UseCompatibleTextRendering = false,
                 Tag = MainWarehouseUiLabelTag
             };
@@ -270,7 +287,8 @@ public partial class MainForm
                 cb.MaximumSize = new Size(0, 26);
             }
 
-            wrap.Controls.Add(cap, 0, 0);
+            capHost.Controls.Add(cap);
+            wrap.Controls.Add(capHost, 0, 0);
             wrap.Controls.Add(field, 0, 1);
             return wrap;
         }
@@ -346,7 +364,7 @@ public partial class MainForm
         {
             Dock = DockStyle.Top,
             ColumnCount = 6,
-            RowCount = 1,
+            RowCount = 2,
             Padding = new Padding(0, 0, 0, 0),
             Margin = Padding.Empty,
             BackColor = Color.White,
@@ -360,29 +378,49 @@ public partial class MainForm
         purchaseFieldsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10f)); // سعر البيع
         purchaseFieldsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20f)); // إنتاج الدفعة
         purchaseFieldsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20f)); // تاريخ الشراء
-        purchaseFieldsRow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        var productStack = MwStackedField("الصنف (من الكتالوج)", _mwProductLookup, gap);
-        productStack.Dock = DockStyle.Fill;
+        purchaseFieldsRow.RowStyles.Add(new RowStyle(SizeType.Absolute, 18f)); // labels
+        purchaseFieldsRow.RowStyles.Add(new RowStyle(SizeType.Absolute, 26f)); // controls
+        Label BuildTopLabel(string text)
+        {
+            return new Label
+            {
+                Text = text,
+                Dock = DockStyle.Fill,
+                AutoSize = false,
+                Font = new Font(MwFontFieldLabel.FontFamily, 9f, FontStyle.Regular, GraphicsUnit.Point),
+                ForeColor = UiTextSecondary,
+                BackColor = Color.White,
+                TextAlign = ContentAlignment.MiddleRight,
+                // Keep Arabic text but disable mirrored label layout so MiddleRight stays physically right.
+                RightToLeft = RightToLeft.No,
+                Margin = Padding.Empty,
+                Padding = new Padding(0, 0, 6, 0),
+                UseCompatibleTextRendering = true,
+                Tag = MainWarehouseUiLabelTag
+            };
+        }
+        _mwProductLookup.Margin = gap;
         _mwQuantity.Margin = Padding.Empty;
         _mwPurchasePrice.Margin = Padding.Empty;
         _mwQuantity.TabIndex = 1;
         _mwPurchasePrice.TabIndex = 2;
-        var qtyCompact = MwStackedField("الكمية", _mwQuantity, gap);
-        qtyCompact.Dock = DockStyle.Fill;
-        var purchaseCompact = MwStackedField("سعر الشراء", _mwPurchasePrice, gap);
-        purchaseCompact.Dock = DockStyle.Fill;
+        _mwQuantity.Margin = gap;
+        _mwPurchasePrice.Margin = gap;
         _mwRetailPrice.Margin = Padding.Empty;
+        _mwRetailPrice.Margin = gap;
         _mwRetailPrice.TabIndex = 3;
         _mwProductionDate.Margin = Padding.Empty;
         _mwPurchaseDate.Margin = Padding.Empty;
+        _mwProductionDate.Margin = gap;
         _mwProductionDate.TabIndex = 4;
         _mwPurchaseDate.TabIndex = 5;
-        var retailHost = MwStackedField("سعر البيع", _mwRetailPrice, gap);
-        retailHost.Dock = DockStyle.Fill;
-        var prodDateHost = MwStackedField("إنتاج الدفعة", _mwProductionDate, gap);
-        prodDateHost.Dock = DockStyle.Fill;
-        var buyDateHost = MwStackedField("تاريخ الشراء", _mwPurchaseDate, Padding.Empty);
-        buyDateHost.Dock = DockStyle.Fill;
+        _mwPurchaseDate.Margin = Padding.Empty;
+        _mwProductLookup.Dock = DockStyle.Fill;
+        _mwQuantity.Dock = DockStyle.Fill;
+        _mwPurchasePrice.Dock = DockStyle.Fill;
+        _mwRetailPrice.Dock = DockStyle.Fill;
+        _mwProductionDate.Dock = DockStyle.Fill;
+        _mwPurchaseDate.Dock = DockStyle.Fill;
         // MwStackedField resets field MaximumSize; apply height caps after wraps are built.
         const int mwCtlH = 26;
         _mwProductLookup.MaximumSize = new Size(0, mwCtlH);
@@ -392,16 +430,22 @@ public partial class MainForm
         _mwRetailPrice.MaximumSize = new Size(0, mwCtlH);
         _mwProductionDate.MaximumSize = new Size(0, mwCtlH);
         _mwPurchaseDate.MaximumSize = new Size(0, mwCtlH);
-        _mainWarehouseToolTip.SetToolTip(qtyCompact, "كمية الشراء لهذه الدفعة.");
-        _mainWarehouseToolTip.SetToolTip(retailHost, "سعر البيع المرجعي في نقطة البيع / الصرف لهذا الصنف.");
-        _mainWarehouseToolTip.SetToolTip(prodDateHost, "تاريخ إنتاج الدفعة كما يُسجَّل في المستودع الرئيسي.");
-        _mainWarehouseToolTip.SetToolTip(buyDateHost, "تاريخ تسجيل عملية الشراء لهذه الدفعة.");
-        purchaseFieldsRow.Controls.Add(productStack, 0, 0);
-        purchaseFieldsRow.Controls.Add(qtyCompact, 1, 0);
-        purchaseFieldsRow.Controls.Add(purchaseCompact, 2, 0);
-        purchaseFieldsRow.Controls.Add(retailHost, 3, 0);
-        purchaseFieldsRow.Controls.Add(prodDateHost, 4, 0);
-        purchaseFieldsRow.Controls.Add(buyDateHost, 5, 0);
+        _mainWarehouseToolTip.SetToolTip(_mwQuantity, "كمية الشراء لهذه الدفعة.");
+        _mainWarehouseToolTip.SetToolTip(_mwRetailPrice, "سعر البيع المرجعي في نقطة البيع / الصرف لهذا الصنف.");
+        _mainWarehouseToolTip.SetToolTip(_mwProductionDate, "تاريخ إنتاج الدفعة كما يُسجَّل في المستودع الرئيسي.");
+        _mainWarehouseToolTip.SetToolTip(_mwPurchaseDate, "تاريخ تسجيل عملية الشراء لهذه الدفعة.");
+        purchaseFieldsRow.Controls.Add(BuildTopLabel("الصنف (من الكتالوج)"), 0, 0);
+        purchaseFieldsRow.Controls.Add(BuildTopLabel("الكمية"), 1, 0);
+        purchaseFieldsRow.Controls.Add(BuildTopLabel("سعر الشراء"), 2, 0);
+        purchaseFieldsRow.Controls.Add(BuildTopLabel("سعر البيع"), 3, 0);
+        purchaseFieldsRow.Controls.Add(BuildTopLabel("إنتاج الدفعة"), 4, 0);
+        purchaseFieldsRow.Controls.Add(BuildTopLabel("تاريخ الشراء"), 5, 0);
+        purchaseFieldsRow.Controls.Add(_mwProductLookup, 0, 1);
+        purchaseFieldsRow.Controls.Add(_mwQuantity, 1, 1);
+        purchaseFieldsRow.Controls.Add(_mwPurchasePrice, 2, 1);
+        purchaseFieldsRow.Controls.Add(_mwRetailPrice, 3, 1);
+        purchaseFieldsRow.Controls.Add(_mwProductionDate, 4, 1);
+        purchaseFieldsRow.Controls.Add(_mwPurchaseDate, 5, 1);
 
         var formRowDivider = new Panel
         {
@@ -413,14 +457,22 @@ public partial class MainForm
 
         ApplyModernWarehouseNumeric(_mwBranchRetailOverride);
         _mwBranchPriceWarehouseCombo.Font = MwFontInput;
-        const int mwBranchBtnW = 96;
-        const int mwBranchBtnH = 28;
+        const int mwBranchBtnW = 112;
+        const int mwBranchBtnH = 30;
         _mwBranchPriceSaveBtn = BuildSizedButton("حفظ", Color.FromArgb(39, 174, 96), mwBranchBtnW, mwBranchBtnH);
         _mwBranchPriceResetBtn = BuildSizedButton("إعادة", Color.FromArgb(108, 117, 125), mwBranchBtnW, mwBranchBtnH);
-        ApplyMainWarehousePrimaryButtonTypography(_mwBranchPriceSaveBtn, 76, 118);
-        ApplyMainWarehousePrimaryButtonTypography(_mwBranchPriceResetBtn, 76, 118);
-        _mwBranchPriceSaveBtn.Margin = new Padding(2, 0, 0, 0);
-        _mwBranchPriceResetBtn.Margin = new Padding(2, 0, 0, 0);
+        ApplyMainWarehousePrimaryButtonTypography(_mwBranchPriceSaveBtn, mwBranchBtnW, mwBranchBtnW);
+        ApplyMainWarehousePrimaryButtonTypography(_mwBranchPriceResetBtn, mwBranchBtnW, mwBranchBtnW);
+        _mwBranchPriceSaveBtn.MinimumSize = new Size(mwBranchBtnW, mwBranchBtnH);
+        _mwBranchPriceSaveBtn.MaximumSize = new Size(mwBranchBtnW, mwBranchBtnH);
+        _mwBranchPriceResetBtn.MinimumSize = new Size(mwBranchBtnW, mwBranchBtnH);
+        _mwBranchPriceResetBtn.MaximumSize = new Size(mwBranchBtnW, mwBranchBtnH);
+        _mwBranchPriceSaveBtn.TextAlign = ContentAlignment.MiddleCenter;
+        _mwBranchPriceResetBtn.TextAlign = ContentAlignment.MiddleCenter;
+        _mwBranchPriceSaveBtn.UseCompatibleTextRendering = true;
+        _mwBranchPriceResetBtn.UseCompatibleTextRendering = true;
+        _mwBranchPriceSaveBtn.Margin = new Padding(3, 0, 3, 0);
+        _mwBranchPriceResetBtn.Margin = new Padding(3, 0, 3, 0);
         _mwBranchPriceSaveBtn.Click += async (_, _) => await SaveMainWarehouseBranchPriceAsync();
         _mwBranchPriceResetBtn.Click += async (_, _) => await ResetMainWarehouseBranchPriceAsync();
 
@@ -428,54 +480,69 @@ public partial class MainForm
         var branchBody = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 4,
-            RowCount = 1,
+            ColumnCount = 3,
+            RowCount = 2,
             Padding = Padding.Empty,
             BackColor = branchMuted,
             RightToLeft = RightToLeft.Yes,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink
         };
-        branchBody.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 148f));
-        branchBody.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 84f));
-        branchBody.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 208f));
-        branchBody.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        branchBody.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        void TintBranchFieldStack(TableLayoutPanel stack)
+        branchBody.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 56f));
+        branchBody.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 16f));
+        branchBody.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (mwBranchBtnW * 2) + 18f));
+        branchBody.RowStyles.Add(new RowStyle(SizeType.Absolute, 18f)); // labels
+        branchBody.RowStyles.Add(new RowStyle(SizeType.Absolute, 30f)); // controls
+        Label BuildBranchTopLabel(string text)
         {
-            stack.BackColor = branchMuted;
-            if (stack.Controls.Count > 0 && stack.Controls[0] is Label cap)
-                cap.BackColor = branchMuted;
+            return new Label
+            {
+                Text = text,
+                Dock = DockStyle.Fill,
+                AutoSize = false,
+                Font = new Font(MwFontFieldLabel.FontFamily, 9f, FontStyle.Regular, GraphicsUnit.Point),
+                ForeColor = UiTextSecondary,
+                BackColor = branchMuted,
+                TextAlign = ContentAlignment.MiddleRight,
+                // Keep physical right alignment for the Arabic caption.
+                RightToLeft = RightToLeft.No,
+                Margin = Padding.Empty,
+                Padding = new Padding(0, 0, 6, 0),
+                UseCompatibleTextRendering = true,
+                Tag = MainWarehouseUiLabelTag
+            };
         }
-        var branchComboStack = MwStackedField("الفرع", _mwBranchPriceWarehouseCombo, gap);
-        branchComboStack.Dock = DockStyle.Fill;
-        TintBranchFieldStack(branchComboStack);
-        _mwBranchPriceWarehouseCombo.MaximumSize = new Size(140, mwCtlH);
-        var branchPriceStack = MwStackedField("سعر الفرع", _mwBranchRetailOverride, Padding.Empty);
-        branchPriceStack.Dock = DockStyle.Fill;
-        TintBranchFieldStack(branchPriceStack);
-        _mwBranchRetailOverride.MaximumSize = new Size(76, mwCtlH);
+        _mwBranchPriceWarehouseCombo.Dock = DockStyle.Fill;
+        _mwBranchRetailOverride.Dock = DockStyle.Fill;
+        _mwBranchPriceWarehouseCombo.Margin = gap;
+        _mwBranchRetailOverride.Margin = gap;
+        _mwBranchPriceWarehouseCombo.MaximumSize = new Size(0, mwCtlH);
+        _mwBranchRetailOverride.MaximumSize = new Size(0, mwCtlH);
         var branchActionsWrap = new Panel { Dock = DockStyle.Fill, BackColor = branchMuted };
-        var branchActions = new FlowLayoutPanel
+        var branchActions = new TableLayoutPanel
         {
-            Dock = DockStyle.Bottom,
-            Height = mwBranchBtnH + 4,
-            FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false,
-            AutoSize = false,
-            Padding = new Padding(0, 0, 0, 0),
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Padding = Padding.Empty,
             Margin = Padding.Empty,
             BackColor = branchMuted,
             RightToLeft = RightToLeft.Yes
         };
-        branchActions.Controls.Add(_mwBranchPriceSaveBtn);
-        branchActions.Controls.Add(_mwBranchPriceResetBtn);
+        branchActions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, mwBranchBtnW + 9f));
+        branchActions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, mwBranchBtnW + 9f));
+        branchActions.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        _mwBranchPriceSaveBtn.Dock = DockStyle.Fill;
+        _mwBranchPriceResetBtn.Dock = DockStyle.Fill;
+        branchActions.Controls.Add(_mwBranchPriceSaveBtn, 0, 0);
+        branchActions.Controls.Add(_mwBranchPriceResetBtn, 1, 0);
         branchActionsWrap.Controls.Add(branchActions);
-        var branchBodySpacer = new Panel { Dock = DockStyle.Fill, BackColor = branchMuted };
-        branchBody.Controls.Add(branchComboStack, 0, 0);
-        branchBody.Controls.Add(branchPriceStack, 1, 0);
-        branchBody.Controls.Add(branchActionsWrap, 2, 0);
-        branchBody.Controls.Add(branchBodySpacer, 3, 0);
+        branchBody.Controls.Add(BuildBranchTopLabel("الفرع"), 0, 0);
+        branchBody.Controls.Add(BuildBranchTopLabel("سعر الفرع"), 1, 0);
+        branchBody.Controls.Add(new Label { Dock = DockStyle.Fill, BackColor = branchMuted, Margin = Padding.Empty }, 2, 0);
+        branchBody.Controls.Add(_mwBranchPriceWarehouseCombo, 0, 1);
+        branchBody.Controls.Add(_mwBranchRetailOverride, 1, 1);
+        branchBody.Controls.Add(branchActionsWrap, 2, 1);
 
         var branchHost = new Panel
         {
@@ -491,18 +558,19 @@ public partial class MainForm
         {
             Text = "\u25B6 سعر الفرع (اختياري)",
             Dock = DockStyle.Top,
-            Height = 22,
+            Height = 24,
             TextAlign = ContentAlignment.MiddleRight,
             RightToLeft = RightToLeft.Yes,
             LinkColor = Color.FromArgb(52, 152, 219),
             ActiveLinkColor = Color.FromArgb(41, 128, 185),
             VisitedLinkColor = Color.FromArgb(52, 152, 219),
             Font = MwFontFieldLabel,
-            BackColor = Color.White,
+            BackColor = branchMuted,
             Margin = new Padding(0, 0, 0, 0),
-            Padding = new Padding(0, 0, 0, 2),
+            Padding = new Padding(10, 0, 10, 2),
             AutoSize = false,
-            LinkBehavior = LinkBehavior.HoverUnderline,
+            LinkBehavior = LinkBehavior.NeverUnderline,
+            Cursor = Cursors.Hand,
             UseCompatibleTextRendering = false,
             Tag = MainWarehouseUiLabelTag
         };
@@ -514,7 +582,7 @@ public partial class MainForm
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Visible = false,
-            Padding = new Padding(8, 6, 8, 6),
+            Padding = new Padding(10, 8, 10, 8),
             Margin = new Padding(0, 2, 0, 0),
             BackColor = branchMuted,
             BorderStyle = BorderStyle.None,
@@ -532,6 +600,7 @@ public partial class MainForm
             branchExpanded = !branchExpanded;
             branchInner.Visible = branchExpanded;
             branchToggle.Text = branchExpanded ? "\u25BC سعر الفرع (اختياري)" : "\u25B6 سعر الفرع (اختياري)";
+            BeginInvoke((Action)RefitMainWarehouseFormPanel);
         };
         branchHost.Controls.Add(branchInner);
         branchHost.Controls.Add(branchToggle);
@@ -597,6 +666,7 @@ public partial class MainForm
         formShell.Controls.Add(branchHost, 0, 3);
         formShell.Controls.Add(opsBar, 0, 4);
         leftCard.Controls.Add(formShell);
+        leftCard.Resize += (_, _) => RefitMainWarehouseFormPanel();
 
         middle.Controls.Add(leftCard, 0, 0);
 
