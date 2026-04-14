@@ -228,71 +228,6 @@ public partial class MainForm
         purchaseHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 52f));
         purchaseHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48f));
 
-        // Caption above control — readable Arabic, no cramped side labels.
-        TableLayoutPanel MwStackedField(string caption, Control field, Padding margin)
-        {
-            var wrap = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 2,
-                Margin = margin,
-                Padding = Padding.Empty,
-                BackColor = Color.White,
-                RightToLeft = RightToLeft.Yes,
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink
-            };
-            wrap.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            wrap.RowStyles.Add(new RowStyle(SizeType.Absolute, 18f));
-            wrap.RowStyles.Add(new RowStyle(SizeType.Absolute, 26f));
-            var capHost = new Panel
-            {
-                Dock = DockStyle.Fill,
-                BackColor = Color.White,
-                RightToLeft = RightToLeft.Yes,
-                Margin = Padding.Empty,
-                Padding = Padding.Empty
-            };
-            var cap = new Label
-            {
-                Text = caption,
-                AutoSize = false,
-                Dock = DockStyle.Fill,
-                Font = new Font(MwFontFieldLabel.FontFamily, 9f, FontStyle.Regular, GraphicsUnit.Point),
-                ForeColor = UiTextSecondary,
-                BackColor = Color.White,
-                TextAlign = ContentAlignment.MiddleRight,
-                RightToLeft = RightToLeft.Yes,
-                Margin = new Padding(0, 0, 0, 0),
-                Padding = new Padding(0, 0, 6, 0),
-                UseCompatibleTextRendering = false,
-                Tag = MainWarehouseUiLabelTag
-            };
-            field.Dock = DockStyle.Fill;
-            field.Margin = Padding.Empty;
-            if (field is NumericUpDown nud)
-            {
-                nud.MinimumSize = new Size(56, 26);
-                nud.MaximumSize = new Size(0, 0);
-            }
-            else if (field is DateTimePicker dtp)
-            {
-                dtp.MinimumSize = new Size(78, 26);
-                dtp.MaximumSize = new Size(0, 0);
-            }
-            else if (field is ComboBox cb)
-            {
-                cb.MinimumSize = new Size(80, 26);
-                cb.MaximumSize = new Size(0, 26);
-            }
-
-            capHost.Controls.Add(cap);
-            wrap.Controls.Add(capHost, 0, 0);
-            wrap.Controls.Add(field, 0, 1);
-            return wrap;
-        }
-
         ApplyModernWarehouseNumeric(_mwQuantity);
         ApplyModernWarehouseNumeric(_mwPurchasePrice);
         ApplyModernWarehouseNumeric(_mwRetailPrice);
@@ -421,7 +356,7 @@ public partial class MainForm
         _mwRetailPrice.Dock = DockStyle.Fill;
         _mwProductionDate.Dock = DockStyle.Fill;
         _mwPurchaseDate.Dock = DockStyle.Fill;
-        // MwStackedField resets field MaximumSize; apply height caps after wraps are built.
+        // Apply height caps after field layout is set.
         const int mwCtlH = 26;
         _mwProductLookup.MaximumSize = new Size(0, mwCtlH);
         _mwProductLookup.DropDownWidth = 420;
