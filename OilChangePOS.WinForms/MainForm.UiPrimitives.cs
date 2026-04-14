@@ -386,4 +386,49 @@ public partial class MainForm
         b.FlatAppearance.MouseOverBackColor = ControlPaint.Light(backColor, 0.12f);
         return b;
     }
+
+    /// <summary>
+    /// Applies <paramref name="preferredDistance"/> once the split container has a real client size.
+    /// Large <see cref="SplitContainer.Panel1MinSize"/> / <see cref="SplitContainer.Panel2MinSize"/> values
+    /// must not be set on a new control (still at default ~150px); the runtime validates
+    /// <see cref="SplitContainer.SplitterDistance"/> against those mins and throws immediately.
+    /// </summary>
+    private static void ApplyInitialSplitterDistance(SplitContainer split, int preferredDistance) =>
+        ApplyInitialSplitterDistance(split, preferredDistance, split.Panel1MinSize, split.Panel2MinSize);
+
+    private static void ApplyInitialSplitterDistance(SplitContainer split, int preferredDistance, int panel1MinSize, int panel2MinSize)
+    {
+        const int safeMin = 25;
+        split.Panel1MinSize = safeMin;
+        split.Panel2MinSize = safeMin;
+
+        void OnSized(object? sender, EventArgs e)
+        {
+            var along = split.Orientation == Orientation.Horizontal ? split.ClientSize.Height : split.ClientSize.Width;
+            var usable = along - split.SplitterWidth;
+            if (usable < panel1MinSize + panel2MinSize)
+                return;
+
+            var maxDist = usable - panel2MinSize;
+            var lo = Math.Min(panel1MinSize, maxDist);
+            var hi = Math.Max(panel1MinSize, maxDist);
+            var dist = Math.Clamp(preferredDistance, lo, hi);
+
+            try
+            {
+                split.SplitterDistance = dist;
+                split.Panel1MinSize = panel1MinSize;
+                split.Panel2MinSize = panel2MinSize;
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
+
+            split.SizeChanged -= OnSized;
+        }
+
+        split.SizeChanged += OnSized;
+        OnSized(split, EventArgs.Empty);
+    }
 }

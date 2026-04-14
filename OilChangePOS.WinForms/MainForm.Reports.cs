@@ -1524,4 +1524,10 @@ public partial class MainForm
                  })
             l.Font = new Font("Segoe UI", 16.5f, FontStyle.Bold, GraphicsUnit.Point);
     }
+
+    private sealed class ReportHistoryProductItem
+    {
+        public int Id { get; init; }
+        public string Caption { get; init; } = string.Empty;
+    }
 }
