@@ -76,47 +76,21 @@ public partial class MainForm
             RightToLeft = RightToLeft.No
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 78f)); // header
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 90f)); // standard module header card
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72f)); // excel
         // Form + grid stack scroll together when the window is short (same idea as analytics tabs).
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
-        var headerPanel = new Panel
-        {
-            Dock = DockStyle.Fill,
-            Margin = new Padding(0, 0, 0, 10),
-            Padding = new Padding(16, 14, 10, 12),
-            BackColor = Color.White,
-            BorderStyle = BorderStyle.FixedSingle,
-            RightToLeft = RightToLeft.Yes
-        };
         var roleAr = _currentUser.Role == UserRole.Admin ? "مدير" : "فرع";
-        _mwHeaderTitleLabel = new Label
-        {
-            AutoSize = true,
-            Text = "المستودع الرئيسي — المشتريات والدفعات",
-            Font = MwFontPageTitle,
-            ForeColor = UiTextPrimary,
-            BackColor = Color.White,
-            RightToLeft = RightToLeft.Yes,
-            UseCompatibleTextRendering = false,
-            Location = new Point(16, 8),
-            TextAlign = ContentAlignment.TopRight
-        };
-        _mwHeaderUserLabel = new Label
-        {
-            AutoSize = true,
-            Text = $"المستخدم: {_currentUser.Username}   ·   {roleAr}",
-            Font = MwFontSubtitle,
-            ForeColor = UiTextSecondary,
-            BackColor = Color.White,
-            RightToLeft = RightToLeft.Yes,
-            UseCompatibleTextRendering = false,
-            Location = new Point(16, 34),
-            TextAlign = ContentAlignment.TopRight
-        };
-        headerPanel.Controls.Add(_mwHeaderTitleLabel);
-        headerPanel.Controls.Add(_mwHeaderUserLabel);
+        var headerPanel = BuildStandardModuleHeaderCard(
+            "المستودع الرئيسي — المشتريات والدفعات",
+            $"المستخدم: {_currentUser.Username}   ·   {roleAr}",
+            subtitleItalic: false,
+            DockStyle.Fill,
+            autoSizeHeight: false,
+            out _mwHeaderTitleLabel,
+            out _mwHeaderUserLabel);
+        headerPanel.Margin = new Padding(0, 0, 0, 10);
 
         var excelCard = new Panel
         {
@@ -129,22 +103,24 @@ public partial class MainForm
         var excelFlow = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.LeftToRight,
+            FlowDirection = FlowDirection.RightToLeft,
             WrapContents = false,
-            BackColor = Color.White
+            BackColor = Color.White,
+            RightToLeft = RightToLeft.No
         };
         var importExcelButton = BuildSizedButton("استيراد من اكسل", Color.FromArgb(39, 174, 96), 168, 40);
         var exportExcelButton = BuildSizedButton("تصدير الى اكسل", Color.FromArgb(52, 152, 219), 168, 40);
         ApplyMainWarehouseFixedToolbarButtonTypography(importExcelButton, 168);
         ApplyMainWarehouseFixedToolbarButtonTypography(exportExcelButton, 168);
-        importExcelButton.Margin = new Padding(0, 0, 10, 0);
-        exportExcelButton.Margin = new Padding(0, 0, 10, 0);
+        // RTL row: first control sits on the physical right.
+        importExcelButton.Margin = new Padding(10, 0, 0, 0);
+        exportExcelButton.Margin = new Padding(10, 0, 0, 0);
         importExcelButton.TabIndex = 9;
         exportExcelButton.TabIndex = 10;
         importExcelButton.Click += async (_, _) => await ImportMainWarehouseExcelAsync();
         exportExcelButton.Click += async (_, _) => await ExportMainWarehouseExcelAsync();
-        excelFlow.Controls.Add(importExcelButton);
         excelFlow.Controls.Add(exportExcelButton);
+        excelFlow.Controls.Add(importExcelButton);
         excelCard.Controls.Add(excelFlow);
         _mainWarehouseToolTip.SetToolTip(importExcelButton, "استيراد كميات أو أصناف من ملف Excel إلى المستودع الرئيسي.");
         _mainWarehouseToolTip.SetToolTip(exportExcelButton, "تصدير أرصدة الأصناف في المستودع الرئيسي إلى ملف Excel.");
@@ -1743,19 +1719,19 @@ public partial class MainForm
         _ = root;
         if (_mwHeaderTitleLabel is not null)
         {
-            _mwHeaderTitleLabel.Font = MwFontPageTitle;
+            _mwHeaderTitleLabel.Font = UiFontTitle;
             _mwHeaderTitleLabel.ForeColor = UiTextPrimary;
             _mwHeaderTitleLabel.BackColor = Color.White;
-            _mwHeaderTitleLabel.RightToLeft = RightToLeft.Yes;
+            _mwHeaderTitleLabel.RightToLeft = RightToLeft.No;
             _mwHeaderTitleLabel.UseCompatibleTextRendering = false;
         }
 
         if (_mwHeaderUserLabel is not null)
         {
-            _mwHeaderUserLabel.Font = MwFontSubtitle;
-            _mwHeaderUserLabel.ForeColor = UiTextSecondary;
+            _mwHeaderUserLabel.Font = ModuleHeaderSubtitleFont;
+            _mwHeaderUserLabel.ForeColor = ModuleHeaderSubtitleForeColor;
             _mwHeaderUserLabel.BackColor = Color.White;
-            _mwHeaderUserLabel.RightToLeft = RightToLeft.Yes;
+            _mwHeaderUserLabel.RightToLeft = RightToLeft.No;
             _mwHeaderUserLabel.UseCompatibleTextRendering = false;
         }
 

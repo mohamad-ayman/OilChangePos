@@ -306,7 +306,7 @@ public partial class MainForm : Form
     private readonly NumericUpDown _posAddQty = new() { DecimalPlaces = 3, Width = 130, Minimum = 0.001m, Value = 1, Maximum = 100000 };
     private readonly NumericUpDown _posDiscount = new() { DecimalPlaces = 2, Width = 120, Maximum = 100000 };
     private readonly Label _breadcrumbLabel = new() { Dock = DockStyle.Top, Height = 22, ForeColor = UiTextSecondary, Text = "الرئيسية / الطلب", TextAlign = ContentAlignment.TopRight, RightToLeft = RightToLeft.Yes };
-    private readonly Label _orderTitleLabel = new() { Dock = DockStyle.Top, Height = 38, Font = UiFontTitle, ForeColor = UiTextPrimary, Text = "البيع", TextAlign = ContentAlignment.TopRight, RightToLeft = RightToLeft.Yes };
+    private readonly Label _orderTitleLabel = new() { Dock = DockStyle.Top, Height = ModuleHeaderTitleHeight, Font = UiFontTitle, ForeColor = UiTextPrimary, Text = "البيع", TextAlign = ContentAlignment.TopRight, RightToLeft = RightToLeft.No };
     private readonly FlowLayoutPanel _categoryPanel = new() { Dock = DockStyle.Top, Height = 42, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(0, 4, 0, 0) };
     private List<AvailableProductRow> _availableProducts = [];
     private string _selectedCategory = "All";
@@ -922,6 +922,16 @@ public partial class MainForm : Form
 
         tab.Controls.Add(gridWrapper);
         tab.Controls.Add(_inventoryTopPanel);
+        var inventoryPageHeader = BuildStandardModuleHeaderCard(
+            "المخزون",
+            "عرض البحث والتنبيهات وتعديل مستويات إعادة الطلب والكميات (صلاحيات المدير).",
+            subtitleItalic: false,
+            DockStyle.Top,
+            autoSizeHeight: true,
+            out _,
+            out _);
+        inventoryPageHeader.Margin = new Padding(0, 0, 0, 8);
+        tab.Controls.Add(inventoryPageHeader);
         return tab;
     }
 
@@ -960,7 +970,8 @@ public partial class MainForm : Form
             Dock = DockStyle.Fill,
             Font = UiFontSection,
             ForeColor = UiTextPrimary,
-            TextAlign = ContentAlignment.MiddleRight
+            TextAlign = ContentAlignment.TopRight,
+            RightToLeft = RightToLeft.No
         };
 
         var companyForm = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, Padding = new Padding(0, 6, 0, 4) };
@@ -1031,7 +1042,8 @@ public partial class MainForm : Form
             Dock = DockStyle.Fill,
             Font = UiFontSection,
             ForeColor = UiTextPrimary,
-            TextAlign = ContentAlignment.MiddleRight
+            TextAlign = ContentAlignment.TopRight,
+            RightToLeft = RightToLeft.No
         };
 
         var productForm = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 4, Padding = new Padding(0, 6, 0, 4) };
@@ -1112,23 +1124,18 @@ public partial class MainForm : Form
         split.Panel1.Controls.Add(leftRoot);
         split.Panel2.Controls.Add(rightRoot);
 
-        var wrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(18, 16, 18, 14), BackColor = Color.FromArgb(245, 247, 250) };
-        var hint = new Label
-        {
-            Text =
-                "أضف الشركة أولاً، ثم اخترها في الجدول وأضف أصنافها (زيت / شحوم / …). المخزون يُستلم من تبويب المستودع الرئيسي. تفعيل الشركة/الصنف يؤثر على ظهوره في القوائم.",
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            MaximumSize = new Size(1150, 0),
-            Margin = new Padding(0, 0, 0, 12),
-            ForeColor = UiTextSecondary,
-            Font = UiFont,
-            TextAlign = ContentAlignment.TopRight,
-            RightToLeft = RightToLeft.Yes,
-            UseCompatibleTextRendering = false
-        };
-        wrap.Controls.Add(hint);
+        var wrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(18, 16, 18, 14), BackColor = Color.FromArgb(245, 247, 250), RightToLeft = RightToLeft.No };
+        var catalogPageHeader = BuildStandardModuleHeaderCard(
+            "الشركات والأصناف",
+            "أضف الشركة أولاً، ثم اخترها في الجدول وأضف أصنافها (زيت / شحوم / …). المخزون يُستلم من تبويب المستودع الرئيسي. تفعيل الشركة/الصنف يؤثر على ظهوره في القوائم.",
+            subtitleItalic: false,
+            DockStyle.Top,
+            autoSizeHeight: true,
+            out _,
+            out _);
+        catalogPageHeader.Margin = new Padding(0, 0, 0, 12);
         wrap.Controls.Add(split);
+        wrap.Controls.Add(catalogPageHeader);
         tab.Controls.Add(wrap);
         return tab;
     }
@@ -1522,26 +1529,32 @@ public partial class MainForm : Form
         };
         ApplyInitialSplitterDistance(split, 400, 200, 160);
 
-        var topBar = new Panel { Dock = DockStyle.Top, Height = 92, Padding = new Padding(12, 8, 12, 0) };
+        var topBar = new Panel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(12, 8, 12, 8), BackColor = Color.FromArgb(245, 247, 250), RightToLeft = RightToLeft.No };
         var runAudit = BuildButton("تنفيذ الجرد وترحيل الفروقات", Color.FromArgb(142, 68, 173));
-        runAudit.Left = 0;
-        runAudit.Top = 8;
         runAudit.Click += async (_, _) => await RunAuditAsync();
 
-        var hint = new Label
+        var auditPageHeader = BuildStandardModuleHeaderCard(
+            "جرد المخزون",
+            "المستودع كما في تبويب المخزون (أو فرع البيع، ثم الرئيسي). أدخل الكمية الفعلية لكل صنف واختر السبب عند الفارق (يُرحّل كحركة تسوية). اللوحة السفلية: سجل للقراءة فقط.",
+            subtitleItalic: false,
+            DockStyle.Top,
+            autoSizeHeight: true,
+            out _,
+            out _);
+        auditPageHeader.Margin = new Padding(0, 0, 0, 10);
+        var runBar = new FlowLayoutPanel
         {
-            AutoSize = false,
-            Width = 720,
-            Height = 44,
-            Left = 0,
-            Top = 48,
-            ForeColor = Color.FromArgb(52, 73, 94),
-            Text = "المستودع كما في تبويب المخزون (أو فرع البيع، ثم الرئيسي). أدخل الكمية الفعلية لكل صنف واختر السبب عند الفارق (يُرحّل كحركة تسوية). اللوحة السفلية: سجل للقراءة فقط.",
-            RightToLeft = RightToLeft.Yes
+            Dock = DockStyle.Top,
+            FlowDirection = FlowDirection.RightToLeft,
+            RightToLeft = RightToLeft.No,
+            WrapContents = false,
+            AutoSize = true,
+            Padding = new Padding(0, 0, 0, 4)
         };
+        runBar.Controls.Add(runAudit);
 
-        topBar.Controls.Add(hint);
-        topBar.Controls.Add(runAudit);
+        topBar.Controls.Add(runBar);
+        topBar.Controls.Add(auditPageHeader);
 
         StyleGrid(_auditGrid);
         ConfigureAuditColumns();
@@ -1643,22 +1656,17 @@ public partial class MainForm : Form
     private TabPage BuildTransferTab()
     {
         var tab = new TabPage("التحويلات");
-        var root = new Panel { Dock = DockStyle.Fill, Padding = new Padding(24, 20, 24, 20), BackColor = Color.FromArgb(245, 247, 250), RightToLeft = RightToLeft.Yes, AutoScroll = true };
-        var title = new Label { Text = "تحويل بين المستودعات", Dock = DockStyle.Top, Height = 40, Font = UiFontSection, ForeColor = UiTextPrimary, TextAlign = ContentAlignment.TopRight, RightToLeft = RightToLeft.Yes, Padding = new Padding(0, 0, 0, 6) };
-        var mainWarehouseHint = new Label
-        {
-            Text =
-                "المستودع الرئيسي يستقبل المشتريات؛ لكل فرع رصيده. التحويل من الرئيسي للفرع يستهلك أقدم تاريخ إنتاج أولاً (FEFO) وقد يظهر عدة أسطر في السجل. التحويل بين الفروع غير مسموح. اختر «من المستودع» أولاً؛ الأصناف المعروضة لها رصيد هناك.",
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            MaximumSize = new Size(1100, 0),
-            Margin = new Padding(0, 0, 0, 18),
-            ForeColor = UiTextSecondary,
-            Font = new Font(UiFont, FontStyle.Italic),
-            TextAlign = ContentAlignment.TopRight,
-            RightToLeft = RightToLeft.Yes,
-            UseCompatibleTextRendering = false
-        };
+        var root = new Panel { Dock = DockStyle.Fill, Padding = new Padding(24, 20, 24, 20), BackColor = Color.FromArgb(245, 247, 250), RightToLeft = RightToLeft.No, AutoScroll = true };
+        var transferHeader = BuildStandardModuleHeaderCard(
+            "تحويل بين المستودعات",
+            "المستودع الرئيسي يستقبل المشتريات؛ لكل فرع رصيده. التحويل من الرئيسي للفرع يستهلك أقدم تاريخ إنتاج أولاً (FEFO) وقد يظهر عدة أسطر في السجل. التحويل بين الفروع غير مسموح. اختر «من المستودع» أولاً؛ الأصناف المعروضة لها رصيد هناك.",
+            subtitleItalic: true,
+            DockStyle.Top,
+            autoSizeHeight: true,
+            out _,
+            out _);
+        transferHeader.Margin = new Padding(0, 0, 0, 12);
+
         _transferFromWarehouseCombo.SelectedIndexChanged += async (_, _) => await RefreshTransferProductsAsync();
         _transferProductCombo.SelectedIndexChanged += (_, _) => SyncTransferQtyLimitFromSelection();
         var form = new TableLayoutPanel
@@ -1697,8 +1705,7 @@ public partial class MainForm : Form
         form.Controls.Add(transferButton, 1, 4);
 
         root.Controls.Add(form);
-        root.Controls.Add(mainWarehouseHint);
-        root.Controls.Add(title);
+        root.Controls.Add(transferHeader);
         tab.Controls.Add(root);
         return tab;
     }

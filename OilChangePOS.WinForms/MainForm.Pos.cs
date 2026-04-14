@@ -88,7 +88,8 @@ public partial class MainForm
         var posTopBundle = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 172,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             ColumnCount = 1,
             RowCount = 3,
             BackColor = Color.FromArgb(241, 243, 248),
@@ -97,8 +98,8 @@ public partial class MainForm
             RightToLeft = RightToLeft.Yes
         };
         posTopBundle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        posTopBundle.RowStyles.Add(new RowStyle(SizeType.Absolute, 32f));
-        posTopBundle.RowStyles.Add(new RowStyle(SizeType.Absolute, 42f));
+        posTopBundle.RowStyles.Add(new RowStyle(SizeType.Absolute, 40f)); // matches ModuleHeaderTitleHeight
+        posTopBundle.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         posTopBundle.RowStyles.Add(new RowStyle(SizeType.Absolute, 98f));
 
         var posTitleLbl = new Label
@@ -108,7 +109,7 @@ public partial class MainForm
             Font = UiFontTitle,
             ForeColor = UiTextPrimary,
             TextAlign = ContentAlignment.TopRight,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             Margin = new Padding(0, 0, 0, 2),
             UseCompatibleTextRendering = false
         };
@@ -116,10 +117,10 @@ public partial class MainForm
         {
             Text = "يسار الشاشة: الأصناف المتاحة. يمين الشاشة: سلة الطلب ثم الملخص والدفع.",
             Dock = DockStyle.Fill,
-            Font = new Font(UiFont.FontFamily, 10.75f, FontStyle.Regular, GraphicsUnit.Point),
-            ForeColor = UiTextSecondary,
+            Font = ModuleHeaderSubtitleFont,
+            ForeColor = ModuleHeaderSubtitleForeColor,
             TextAlign = ContentAlignment.TopRight,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             Margin = new Padding(0, 0, 0, 4),
             UseCompatibleTextRendering = false
         };

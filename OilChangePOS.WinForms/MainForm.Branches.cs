@@ -14,40 +14,26 @@ public partial class MainForm
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 5,
+            RowCount = 4,
             Padding = new Padding(22, 20, 22, 18),
             BackColor = Color.FromArgb(245, 247, 250)
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // title
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // subtitle
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 118f)); // standard header card (title + wrapped subtitle)
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // form fields
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // actions bar
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // grid
 
-        var title = new Label
-        {
-            Text = "إدارة الفروع (مرجع)",
-            AutoSize = true,
-            Margin = new Padding(0, 0, 0, 10),
-            Font = UiFontTitle,
-            ForeColor = UiTextPrimary,
-            RightToLeft = RightToLeft.Yes
-        };
-        root.Controls.Add(title, 0, 0);
-
-        var subtitle = new Label
-        {
-            Text = "إضافة وتعديل وتعطيل فروع البيع فقط. المستودع الرئيسي يُدار تلقائياً ولا يُعرض هنا.",
-            AutoSize = true,
-            MaximumSize = new Size(1100, 0),
-            Margin = new Padding(0, 0, 0, 16),
-            ForeColor = UiTextSecondary,
-            Font = UiFont,
-            TextAlign = ContentAlignment.TopRight,
-            RightToLeft = RightToLeft.Yes
-        };
-        root.Controls.Add(subtitle, 0, 1);
+        var headerCard = BuildStandardModuleHeaderCard(
+            "إدارة الفروع (مرجع)",
+            "إضافة وتعديل وتعطيل فروع البيع فقط. المستودع الرئيسي يُدار تلقائياً ولا يُعرض هنا.",
+            subtitleItalic: false,
+            DockStyle.Fill,
+            autoSizeHeight: false,
+            out _,
+            out _);
+        headerCard.Margin = new Padding(0, 0, 0, 10);
+        root.Controls.Add(headerCard, 0, 0);
 
         var formHost = new Panel
         {
@@ -88,7 +74,7 @@ public partial class MainForm
             await LoadWarehousesAsync();
         };
         formHost.Controls.Add(formFlow);
-        root.Controls.Add(formHost, 0, 2);
+        root.Controls.Add(formHost, 0, 1);
 
         var actionRow = new TableLayoutPanel
         {
@@ -115,14 +101,14 @@ public partial class MainForm
         actionRow.Controls.Add(saveBranch, 1, 0);
         actionRow.Controls.Add(newBranch, 2, 0);
         actionRow.Controls.Add(refreshBranches, 3, 0);
-        root.Controls.Add(actionRow, 0, 3);
+        root.Controls.Add(actionRow, 0, 2);
 
         StyleGrid(_branchesGrid);
         ConfigureBranchesAdminColumns();
         _branchesGrid.Dock = DockStyle.Fill;
         _branchesGrid.Margin = new Padding(0, 12, 0, 0);
         _branchesGrid.SelectionChanged += (_, _) => LoadSelectedBranchRow();
-        root.Controls.Add(_branchesGrid, 0, 4);
+        root.Controls.Add(_branchesGrid, 0, 3);
 
         tab.Controls.Add(root);
         return tab;

@@ -3,6 +3,130 @@ namespace OilChangePOS.WinForms;
 /// <summary>Shared UI builders and grid styling used across tabs.</summary>
 public partial class MainForm
 {
+    /// <summary>Single-line module page title height (white header cards).</summary>
+    private const int ModuleHeaderTitleHeight = 40;
+    private static readonly Padding ModuleHeaderCardPadding = new(16, 14, 16, 12);
+    /// <summary>Module header subtitle: darker than <see cref="UiTextSecondary"/> for contrast on white.</summary>
+    private static readonly Color ModuleHeaderSubtitleForeColor = Color.FromArgb(36, 40, 48);
+    /// <summary>Slightly larger than <see cref="UiFont"/> so long Arabic lines stay readable.</summary>
+    private static readonly Font ModuleHeaderSubtitleFont = new("Segoe UI", 11.75f, FontStyle.Regular, GraphicsUnit.Point);
+
+    /// <summary>
+    /// White bordered strip: <see cref="UiFontTitle"/> + optional <see cref="UiFont"/> subtitle, physical right alignment.
+    /// Use <paramref name="autoSizeHeight"/> with <see cref="DockStyle.Top"/> so multi-line subtitles grow the panel.
+    /// Use <see cref="DockStyle.Fill"/> + <paramref name="autoSizeHeight"/> false inside a fixed-height table row.
+    /// </summary>
+    private static Panel BuildStandardModuleHeaderCard(
+        string titleText,
+        string? subtitleText,
+        bool subtitleItalic,
+        DockStyle panelDock,
+        bool autoSizeHeight,
+        out Label titleLabel,
+        out Label? subtitleLabel)
+    {
+        var panel = new Panel
+        {
+            Dock = panelDock,
+            Margin = new Padding(0, 0, 0, 10),
+            Padding = ModuleHeaderCardPadding,
+            BackColor = Color.White,
+            BorderStyle = BorderStyle.FixedSingle,
+            RightToLeft = RightToLeft.No
+        };
+
+        var hasSub = !string.IsNullOrWhiteSpace(subtitleText);
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = hasSub ? 2 : 1,
+            BackColor = Color.White,
+            RightToLeft = RightToLeft.No,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+            AutoSize = autoSizeHeight && panelDock == DockStyle.Top,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, ModuleHeaderTitleHeight));
+        if (hasSub)
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        var ttl = new Label
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = false,
+            Text = titleText,
+            Font = UiFontTitle,
+            ForeColor = UiTextPrimary,
+            BackColor = Color.White,
+            TextAlign = ContentAlignment.TopRight,
+            RightToLeft = RightToLeft.No,
+            UseCompatibleTextRendering = false,
+            Padding = new Padding(0, 0, 0, 4)
+        };
+        layout.Controls.Add(ttl, 0, 0);
+
+        Label? sub = null;
+        if (!hasSub)
+        {
+            panel.Controls.Add(layout);
+            titleLabel = ttl;
+            subtitleLabel = null;
+            if (autoSizeHeight && panelDock == DockStyle.Top)
+                panel.Height = panel.Padding.Vertical + ModuleHeaderTitleHeight;
+            return panel;
+        }
+
+        sub = new Label
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            Text = subtitleText,
+            Font = subtitleItalic
+                ? new Font(ModuleHeaderSubtitleFont.FontFamily, ModuleHeaderSubtitleFont.Size, FontStyle.Italic, GraphicsUnit.Point)
+                : ModuleHeaderSubtitleFont,
+            ForeColor = ModuleHeaderSubtitleForeColor,
+            BackColor = Color.White,
+            TextAlign = ContentAlignment.TopRight,
+            RightToLeft = RightToLeft.No,
+            UseCompatibleTextRendering = false,
+            Padding = new Padding(0, 2, 0, 0)
+        };
+        layout.Controls.Add(sub, 0, 1);
+        panel.Controls.Add(layout);
+
+        void SyncSubtitleWrapAndHeight(object? _, EventArgs __)
+        {
+            var innerW = Math.Max(280, panel.ClientSize.Width - panel.Padding.Horizontal);
+            sub!.MaximumSize = new Size(innerW, 0);
+            if (autoSizeHeight && panel.Dock == DockStyle.Top)
+            {
+                layout.PerformLayout();
+                var innerH = layout.GetPreferredSize(new Size(innerW, int.MaxValue)).Height;
+                panel.Height = panel.Padding.Vertical + innerH;
+            }
+        }
+
+        panel.HandleCreated += SyncSubtitleWrapAndHeight;
+        panel.Resize += SyncSubtitleWrapAndHeight;
+        sub.SizeChanged += (_, _) =>
+        {
+            if (autoSizeHeight && panel.Dock == DockStyle.Top)
+            {
+                var innerW = Math.Max(280, panel.ClientSize.Width - panel.Padding.Horizontal);
+                layout.PerformLayout();
+                var innerH = layout.GetPreferredSize(new Size(innerW, int.MaxValue)).Height;
+                panel.Height = panel.Padding.Vertical + innerH;
+            }
+        };
+
+        titleLabel = ttl;
+        subtitleLabel = sub;
+        return panel;
+    }
+
     private static Panel BuildAnalyticsKpiCard(string caption, Label valueLabel, Color accent, bool reportsRtl)
     {
         var wrap = new Panel { Width = 200, Height = 102, Margin = new Padding(10, 6, 10, 10), BackColor = Color.White };

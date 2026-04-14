@@ -372,55 +372,32 @@ public partial class MainForm
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             ColumnCount = 1,
-            RowCount = 4,
+            RowCount = 3,
             Padding = new Padding(16, 12, 16, 12),
             BackColor = Color.FromArgb(245, 247, 250),
             RightToLeft = RightToLeft.Yes
         };
         chrome.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        chrome.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        chrome.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        chrome.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        chrome.RowStyles.Add(new RowStyle(SizeType.Absolute, 118f)); // standard module header
+        chrome.RowStyles.Add(new RowStyle(SizeType.Absolute, 72f)); // filter toolbar
         chrome.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        var title = new Label
-        {
-            Text = "حصر الفرع — البيع والوارد والبائع",
-            AutoSize = true,
-            Dock = DockStyle.Fill,
-            Font = UiFontTitle,
-            ForeColor = UiTextPrimary,
-            TextAlign = ContentAlignment.TopRight,
-            RightToLeft = RightToLeft.Yes,
-            Margin = new Padding(0, 0, 0, 6),
-            UseCompatibleTextRendering = false
-        };
-        var subtitle = new Label
-        {
-            Text = "المستودع هو نفس المستودع المختار في «طلب / بيع» و«المخزون». غيّر الفترة ثم اضغط «تحديث».",
-            AutoSize = true,
-            Dock = DockStyle.Fill,
-            Font = UiFont,
-            ForeColor = UiTextSecondary,
-            TextAlign = ContentAlignment.TopRight,
-            RightToLeft = RightToLeft.Yes,
-            Margin = new Padding(0, 0, 0, 10),
-            UseCompatibleTextRendering = false
-        };
-
-        void SyncWrap(object? _, EventArgs __)
-        {
-            var w = Math.Max(320, chrome.ClientSize.Width - chrome.Padding.Horizontal);
-            subtitle.MaximumSize = new Size(w, 0);
-        }
-        chrome.HandleCreated += SyncWrap;
-        chrome.Resize += SyncWrap;
+        var branchReportsHeader = BuildStandardModuleHeaderCard(
+            "حصر الفرع — البيع والوارد والبائع",
+            "المستودع هو نفس المستودع المختار في «طلب / بيع» و«المخزون». غيّر الفترة ثم اضغط «تحديث».",
+            subtitleItalic: false,
+            DockStyle.Fill,
+            autoSizeHeight: false,
+            out _,
+            out _);
+        branchReportsHeader.Margin = new Padding(0, 0, 0, 8);
+        chrome.Controls.Add(branchReportsHeader, 0, 0);
 
         var filterFlow = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.RightToLeft,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             WrapContents = true,
             Padding = new Padding(10, 6, 10, 6),
             BackColor = Color.FromArgb(248, 250, 252),
@@ -462,15 +439,13 @@ public partial class MainForm
         _branchOnlyFromPicker.ValueChanged += async (_, _) => await RefreshBranchOnlyReportsAsync();
         _branchOnlyToPicker.ValueChanged += async (_, _) => await RefreshBranchOnlyReportsAsync();
 
-        chrome.Controls.Add(title, 0, 0);
-        chrome.Controls.Add(subtitle, 0, 1);
-        chrome.Controls.Add(filterFlow, 0, 2);
+        chrome.Controls.Add(filterFlow, 0, 1);
 
         var bannerHost = new Panel { Dock = DockStyle.Fill, Padding = new Padding(14, 6, 14, 4), BackColor = Color.FromArgb(245, 247, 250), RightToLeft = RightToLeft.Yes };
         _branchOnlyPeriodBanner.Dock = DockStyle.Fill;
         _branchOnlyPeriodBanner.Font = UiFontSection;
         bannerHost.Controls.Add(_branchOnlyPeriodBanner);
-        chrome.Controls.Add(bannerHost, 0, 3);
+        chrome.Controls.Add(bannerHost, 0, 2);
 
         ApplyProfitModuleGridChrome(_branchOnlySalesLinesGrid);
         ApplyProfitModuleGridChrome(_branchOnlyIncomingGrid);
@@ -561,8 +536,6 @@ public partial class MainForm
         _expenseSaveButton.Enabled = _currentUser.Role == UserRole.Admin;
         _expenseSaveButton.Click += async (_, _) => await SaveExpenseFromReportsAsync();
 
-        var brTitle = UiFontTitle;
-        var brSub = UiFont;
         var lblFont = UiFontCaption;
         var refresh = BuildButton("تحديث", Color.FromArgb(41, 128, 185));
         refresh.Click += async (_, _) => await RefreshReportsAsync();
@@ -574,51 +547,37 @@ public partial class MainForm
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             ColumnCount = 1,
-            RowCount = 5,
+            RowCount = 4,
             Padding = new Padding(16, 12, 16, 14),
             BackColor = Color.FromArgb(245, 247, 250),
             RightToLeft = RightToLeft.Yes
         };
         reportsChrome.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        reportsChrome.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        reportsChrome.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        reportsChrome.RowStyles.Add(new RowStyle(SizeType.Absolute, 118f)); // standard module header
         reportsChrome.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
         reportsChrome.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         reportsChrome.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        var hdrTitleLbl = new Label
-        {
-            Text = "التحليلات والتقارير",
-            AutoSize = true,
-            Dock = DockStyle.Fill,
-            Font = brTitle,
-            ForeColor = UiTextPrimary,
-            TextAlign = ContentAlignment.TopRight,
-            RightToLeft = RightToLeft.Yes,
-            Margin = new Padding(0, 0, 0, 6),
-            UseCompatibleTextRendering = false
-        };
-        var hdrSubLbl = new Label
-        {
-            Text = "أداء الفروع، تقدير الهامش، حركة الأصناف، التحويلات، والمخزون على مستوى الشركة — ومن تبويب «حصر الفرع» تفاصيل البيع والوارد والبائع للمستودع المحدد.",
-            AutoSize = true,
-            Dock = DockStyle.Fill,
-            Font = brSub,
-            ForeColor = UiTextSecondary,
-            TextAlign = ContentAlignment.TopRight,
-            RightToLeft = RightToLeft.Yes,
-            Margin = new Padding(0, 0, 0, 12),
-            UseCompatibleTextRendering = false
-        };
+        var reportsPageHeader = BuildStandardModuleHeaderCard(
+            "التحليلات والتقارير",
+            "أداء الفروع، تقدير الهامش، حركة الأصناف، التحويلات، والمخزون على مستوى الشركة — ومن تبويب «حصر الفرع» تفاصيل البيع والوارد والبائع للمستودع المحدد.",
+            subtitleItalic: false,
+            DockStyle.Fill,
+            autoSizeHeight: false,
+            out _,
+            out _);
+        reportsPageHeader.Margin = new Padding(0, 0, 0, 8);
+        reportsChrome.Controls.Add(reportsPageHeader, 0, 0);
+
         var toolbarHintLbl = new Label
         {
             Text = "البطاقات وقوائم المنتجات أدناه للمستودع المحدد. جدول المقارنة يشمل كل المواقع (صفر طبيعي إن لم تُستخدم نقطة البيع بعد هناك).",
             AutoSize = true,
             Dock = DockStyle.Fill,
-            ForeColor = UiTextSecondary,
-            Font = new Font(UiFont, FontStyle.Italic),
+            ForeColor = ModuleHeaderSubtitleForeColor,
+            Font = new Font(ModuleHeaderSubtitleFont, FontStyle.Italic),
             TextAlign = ContentAlignment.TopRight,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             Margin = new Padding(0, 4, 0, 10),
             UseCompatibleTextRendering = false
         };
@@ -626,7 +585,6 @@ public partial class MainForm
         void SyncReportsChromeWrapWidths()
         {
             var w = Math.Max(320, reportsChrome.ClientSize.Width - reportsChrome.Padding.Horizontal);
-            hdrSubLbl.MaximumSize = new Size(w, 0);
             toolbarHintLbl.MaximumSize = new Size(w, 0);
         }
         reportsChrome.HandleCreated += (_, _) => SyncReportsChromeWrapWidths();
@@ -636,7 +594,8 @@ public partial class MainForm
         {
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.RightToLeft,
-            RightToLeft = RightToLeft.Yes,
+            // LTR host: first control in collection is placed on the physical right (matches Arabic toolbar).
+            RightToLeft = RightToLeft.No,
             WrapContents = true,
             Padding = new Padding(10, 6, 10, 6),
             Margin = new Padding(0, 0, 0, 0),
@@ -704,18 +663,16 @@ public partial class MainForm
         {
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.RightToLeft,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             Padding = new Padding(4, 4, 4, 4),
             WrapContents = false,
             AutoScroll = true,
             BackColor = Color.Transparent
         };
 
-        reportsChrome.Controls.Add(hdrTitleLbl, 0, 0);
-        reportsChrome.Controls.Add(hdrSubLbl, 0, 1);
-        reportsChrome.Controls.Add(filterFlow, 0, 2);
-        reportsChrome.Controls.Add(toolbarHintLbl, 0, 3);
-        reportsChrome.Controls.Add(exportAndNavRow, 0, 4);
+        reportsChrome.Controls.Add(filterFlow, 0, 1);
+        reportsChrome.Controls.Add(toolbarHintLbl, 0, 2);
+        reportsChrome.Controls.Add(exportAndNavRow, 0, 3);
 
         var kpiFlow = new FlowLayoutPanel
         {
@@ -1274,6 +1231,7 @@ public partial class MainForm
             }
         }
 
+        exportAndNavRow.Controls.Add(exportExcelBtn);
         for (var i = 0; i < reportPanels.Length; i++)
         {
             var idx = i;
@@ -1282,8 +1240,6 @@ public partial class MainForm
             exportAndNavRow.Controls.Add(b);
             navButtons[i] = b;
         }
-
-        exportAndNavRow.Controls.Add(exportExcelBtn);
 
         foreach (var p in reportPanels)
         {
