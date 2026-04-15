@@ -1,18 +1,19 @@
 using System.Globalization;
-using System.Text;
+using System.Net.Http;
 using System.Threading;
-using Microsoft.Data.SqlClient;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using OilChangePOS.Business;
-using OilChangePOS.Data;
 using OilChangePOS.Domain;
+using OilChangePOS.WinForms.Remote;
 
 namespace OilChangePOS.WinForms;
 
 internal static class Program
 {
+    private const string HttpClientName = "OilChangePOS";
+
     [STAThread]
     private static void Main()
     {
@@ -27,54 +28,79 @@ internal static class Program
             .AddJsonFile("appsettings.json", optional: true)
             .Build();
 
-        var services = new ServiceCollection();
-        var connectionString = configuration.GetConnectionString("DefaultConnection")
-                               ?? "Server=(localdb)\\MSSQLLocalDB;Database=OilChangePOSDb;Trusted_Connection=True;TrustServerCertificate=True;";
+        var apiOptions = configuration.GetSection(OilChangeApiOptions.SectionName).Get<OilChangeApiOptions>() ?? new OilChangeApiOptions();
+        var baseUrl = apiOptions.BaseUrl?.Trim();
+        if (string.IsNullOrEmpty(baseUrl))
+            baseUrl = "http://localhost:5099/";
+        if (!baseUrl.EndsWith('/'))
+            baseUrl += "/";
 
-        services.AddDbContextFactory<OilChangePosDbContext>(options => options.UseSqlServer(connectionString));
-        services.AddScoped<IInventoryService, InventoryService>();
-        services.AddScoped<ITransferService, TransferService>();
-        services.AddScoped<ISalesService, SalesService>();
-        services.AddScoped<IReportService, ReportService>();
-        services.AddScoped<IExpenseService, ExpenseService>();
-        services.AddScoped<ICustomerService, CustomerService>();
-        services.AddScoped<IWarehouseService, WarehouseService>();
-        services.AddScoped<IAuthService, AuthService>();
+        if (!apiOptions.SkipApiHealthCheck)
+        {
+            var healthUri = new Uri(new Uri(baseUrl, UriKind.Absolute), "api/health");
+            var maxWait = TimeSpan.FromSeconds(Math.Clamp(apiOptions.StartupMaxWaitSeconds, 5, 600));
+            var retryDelay = TimeSpan.FromMilliseconds(Math.Clamp(apiOptions.StartupRetryMilliseconds, 100, 10_000));
+            var deadline = DateTime.UtcNow + maxWait;
+            var ready = false;
+            Exception? lastError = null;
+            using var probe = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+            while (DateTime.UtcNow < deadline)
+            {
+                try
+                {
+                    using var response = probe.GetAsync(healthUri).GetAwaiter().GetResult();
+                    if (response.IsSuccessStatusCode)
+                    {
+                        ready = true;
+                        break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    lastError = ex;
+                }
+
+                Thread.Sleep(retryDelay);
+            }
+
+            if (!ready)
+            {
+                var detail = lastError?.Message ?? "لم يتم استلام رد ناجح من api/health.";
+                MessageBox.Show(
+                    $"تعذر الاتصال بالخادم (API) خلال {maxWait.TotalSeconds} ثانية.\n\nالعنوان:\n{baseUrl}\n\n{detail}\n\nشغّل OilChangePOS.API أو انتظر حتى يكتمل الإقلاع ثم أعد المحاولة.",
+                    "خطأ في بدء التشغيل",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error,
+                    MessageBoxDefaultButton.Button1,
+                    MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
+                return;
+            }
+        }
+
+        var services = new ServiceCollection();
+        services.Configure<OilChangeApiOptions>(configuration.GetSection(OilChangeApiOptions.SectionName));
+        services.AddHttpClient(HttpClientName, (sp, client) =>
+        {
+            var opt = sp.GetRequiredService<IOptions<OilChangeApiOptions>>().Value;
+            var url = string.IsNullOrWhiteSpace(opt.BaseUrl) ? baseUrl : opt.BaseUrl.Trim();
+            if (!url.EndsWith('/')) url += "/";
+            client.BaseAddress = new Uri(url, UriKind.Absolute);
+            client.Timeout = TimeSpan.FromMinutes(2);
+        });
+
+        services.AddScoped<IInventoryService>(sp => new HttpInventoryService(sp.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName)));
+        services.AddScoped<IReportService>(sp => new HttpReportService(sp.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName)));
+        services.AddScoped<IExpenseService>(sp => new HttpExpenseService(sp.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName)));
+        services.AddScoped<ITransferService>(sp => new HttpTransferService(sp.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName)));
+        services.AddScoped<IWarehouseService>(sp => new HttpWarehouseService(sp.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName)));
+        services.AddScoped<ICustomerService>(sp => new HttpCustomerService(sp.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName)));
+        services.AddScoped<IAuthService>(sp => new HttpAuthService(sp.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName)));
+        services.AddScoped<ISalesService>(sp => new HttpSalesService(sp.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName)));
+        services.AddScoped<ICatalogAdminService>(sp => new HttpCatalogAdminService(sp.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName)));
+        services.AddScoped<IMainWarehouseAdminService>(sp => new HttpMainWarehouseAdminService(sp.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName)));
+        services.AddScoped<IProductCatalogService>(sp => new HttpProductCatalogService(sp.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName)));
 
         using var provider = services.BuildServiceProvider();
-        try
-        {
-            var dbFactory = provider.GetRequiredService<IDbContextFactory<OilChangePosDbContext>>();
-            using (var db = dbFactory.CreateDbContext())
-            {
-                DatabaseInitializer.SeedAsync(db).GetAwaiter().GetResult();
-            }
-        }
-        catch (Exception ex)
-        {
-            var detail = new StringBuilder();
-            detail.AppendLine(ex.Message);
-            for (Exception? inner = ex.InnerException; inner != null; inner = inner.InnerException)
-                detail.AppendLine(inner.Message);
-            for (Exception? scan = ex; scan != null; scan = scan.InnerException)
-            {
-                if (scan is not SqlException sql)
-                    continue;
-                foreach (SqlError err in sql.Errors)
-                    detail.AppendLine($"SQL خطأ {err.Number}، سطر {err.LineNumber}: {err.Message}");
-                break;
-            }
-
-            MessageBox.Show(
-                $"فشل الاتصال بقاعدة البيانات.\n\nسلسلة الاتصال:\n{connectionString}\n\nالخطأ:\n{detail}\n\n" +
-                "أصلح إعدادات SQL Server في appsettings.json وأعد التشغيل.",
-                "خطأ في بدء التشغيل",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error,
-                MessageBoxDefaultButton.Button1,
-                MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
-            return;
-        }
 
         while (true)
         {
@@ -89,7 +115,6 @@ internal static class Program
             using var appScope = provider.CreateScope();
             var sp = appScope.ServiceProvider;
             using var main = new MainForm(
-                sp.GetRequiredService<IDbContextFactory<OilChangePosDbContext>>(),
                 sp.GetRequiredService<ISalesService>(),
                 sp.GetRequiredService<IInventoryService>(),
                 sp.GetRequiredService<IReportService>(),
@@ -98,6 +123,9 @@ internal static class Program
                 sp.GetRequiredService<IWarehouseService>(),
                 sp.GetRequiredService<ICustomerService>(),
                 sp.GetRequiredService<IAuthService>(),
+                sp.GetRequiredService<ICatalogAdminService>(),
+                sp.GetRequiredService<IMainWarehouseAdminService>(),
+                sp.GetRequiredService<IProductCatalogService>(),
                 sessionUser!);
 
             Application.Run(main);

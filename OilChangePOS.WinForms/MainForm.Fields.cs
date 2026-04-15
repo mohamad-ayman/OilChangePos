@@ -1,7 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
 using ClosedXML.Excel;
 using OilChangePOS.Business;
-using OilChangePOS.Data;
 using OilChangePOS.Domain;
 using System.Globalization;
 
@@ -39,7 +37,9 @@ public partial class MainForm : Form
     private const string UiCurrencySuffix = " ج.م";
     /// <summary>Main Warehouse captions/inputs with this <see cref="Control.Tag"/> skip <see cref="ApplyUnifiedFont"/> so sizes stay readable.</summary>
     private const string MainWarehouseUiLabelTag = "MW_UI";
-    private readonly IDbContextFactory<OilChangePosDbContext> _dbFactory;
+    private readonly ICatalogAdminService _catalogAdminService;
+    private readonly IMainWarehouseAdminService _mainWarehouseAdminService;
+    private readonly IProductCatalogService _productCatalogService;
     private readonly ISalesService _salesService;
     private readonly IInventoryService _inventoryService;
     private readonly IReportService _reportService;
@@ -240,7 +240,7 @@ public partial class MainForm : Form
     private TabPage? _mainWarehouseTabPage;
     private TabPage? _bulkPurchaseTabPage;
     /// <summary>Catalog rows plus a placeholder (Id=0) for the bulk purchase line grid combo.</summary>
-    private List<MainWarehouseCatalogRow> _bulkPurchaseProductComboDataSource = [];
+    private List<MainWarehouseCatalogEntryDto> _bulkPurchaseProductComboDataSource = [];
     private readonly TextBox _bulkPurchaseSupplierEdit = new()
     {
         Width = 280,
@@ -352,7 +352,7 @@ public partial class MainForm : Form
     private int? _selectedMainPurchaseId;
     private bool _suppressMainWarehouseRowLoad;
     private bool _mainWarehouseGridRefreshing;
-    private List<MainWarehouseRow> _mainWarehouseAllRows = [];
+    private List<MainWarehouseGridRowDto> _mainWarehouseAllRows = [];
     private int _mainWarehousePageIndex;
     private Button _mainWarehousePagerPrev = null!;
     private Button _mainWarehousePagerNext = null!;

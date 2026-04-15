@@ -1,12 +1,9 @@
-﻿using Microsoft.EntityFrameworkCore;
 using ClosedXML.Excel;
 using OilChangePOS.Business;
-using OilChangePOS.Data;
 using OilChangePOS.Domain;
 using System.Globalization;
 
 namespace OilChangePOS.WinForms;
-
 public partial class MainForm : Form
 {
 

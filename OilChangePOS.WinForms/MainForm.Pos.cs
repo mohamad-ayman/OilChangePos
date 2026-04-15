@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using OilChangePOS.Business;
 
 namespace OilChangePOS.WinForms;
@@ -792,8 +791,7 @@ public partial class MainForm
             return;
         }
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var products = await db.Products.AsNoTracking().Include(p => p.Company).Where(x => x.IsActive).ToListAsync();
+        var products = (await _productCatalogService.GetProductSummariesAsync(true)).ToList();
         var productIds = products.ConvertAll(p => p.Id);
         var overrides = await _inventoryService.GetBranchSalePriceOverridesAsync(branchWarehouseId, productIds);
         var rows = new List<AvailableProductRow>();
@@ -804,7 +802,7 @@ public partial class MainForm
             rows.Add(new AvailableProductRow
             {
                 ProductId = product.Id,
-                CompanyName = product.Company?.Name ?? string.Empty,
+                CompanyName = product.CompanyName,
                 ProductName = product.Name,
                 UnitPrice = unit,
                 AvailableStock = stock,

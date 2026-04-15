@@ -1,8 +1,7 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\OilChangePOS.Business\OilChangePOS.Business.csproj" />
-    <ProjectReference Include="..\OilChangePOS.Data\OilChangePOS.Data.csproj" />
     <ProjectReference Include="..\OilChangePOS.Domain\OilChangePOS.Domain.csproj" />
   </ItemGroup>
 
@@ -10,6 +9,8 @@
     <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.5" />
   </ItemGroup>
   
   <ItemGroup>

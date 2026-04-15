@@ -1,7 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using ClosedXML.Excel;
 using OilChangePOS.Business;
-using OilChangePOS.Data;
 using OilChangePOS.Domain;
 using System.Globalization;
 
@@ -41,7 +39,7 @@ public partial class MainForm
     private async Task RefreshMainWarehouseAvailableStockHintAsync()
     {
         if (_mwAvailableStockLabel is null) return;
-        if (_mwProductLookup.SelectedItem is not MainWarehouseCatalogRow row)
+        if (_mwProductLookup.SelectedItem is not MainWarehouseCatalogEntryDto row)
         {
             SetMainWarehouseStockHint(string.Empty);
             return;
@@ -573,7 +571,7 @@ public partial class MainForm
         _mainWarehouseGrid.AllowUserToAddRows = false;
         _mainWarehouseGrid.Dock = DockStyle.Fill;
         _mainWarehouseGrid.Margin = new Padding(0, 2, 0, 0);
-        _mainWarehouseGrid.SelectionChanged += (_, _) => LoadSelectedMainWarehouseRow();
+        _mainWarehouseGrid.SelectionChanged += (_, _) => LoadSelectedMainWarehouseGridRowDto();
 
         var gridCard = new Panel
         {
@@ -732,7 +730,7 @@ public partial class MainForm
         _mainWarehouseGrid.ColumnHeadersDefaultCellStyle.SelectionBackColor = headerBg;
         foreach (DataGridViewColumn col in _mainWarehouseGrid.Columns)
         {
-            if (col.DataPropertyName == nameof(MainWarehouseRow.BatchLabel))
+            if (col.DataPropertyName == nameof(MainWarehouseGridRowDto.BatchLabel))
                 col.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         }
     }
@@ -752,7 +750,7 @@ public partial class MainForm
         TryGetMainWarehouseAddInputs(out _, out _, out _, out _, out _, out _);
 
     private bool TryGetMainWarehouseAddInputs(
-        out MainWarehouseCatalogRow? catalog,
+        out MainWarehouseCatalogEntryDto? catalog,
         out decimal quantity,
         out decimal purchasePrice,
         out DateTime productionDate,
@@ -766,7 +764,7 @@ public partial class MainForm
         purchaseDate = default;
         errorMessage = null;
 
-        if (_mwProductLookup.SelectedItem is not MainWarehouseCatalogRow c)
+        if (_mwProductLookup.SelectedItem is not MainWarehouseCatalogEntryDto c)
         {
             errorMessage = "اختر صنفاً من القائمة (أضف أصنافاً من تبويب المخزون أولاً).";
             return false;
@@ -847,7 +845,7 @@ public partial class MainForm
         if (pageRows.Count == 0)
             ClearMainWarehouseForm();
         else
-            LoadSelectedMainWarehouseRow();
+            LoadSelectedMainWarehouseGridRowDto();
     }
 
     private static void ApplyModernWarehouseNumeric(NumericUpDown n)
@@ -882,7 +880,7 @@ public partial class MainForm
         _mainWarehouseGrid.Columns.Clear();
         _mainWarehouseGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
-            DataPropertyName = nameof(MainWarehouseRow.CompanyName),
+            DataPropertyName = nameof(MainWarehouseGridRowDto.CompanyName),
             HeaderText = "الشركة",
             FillWeight = 10,
             MinimumWidth = 90,
@@ -890,7 +888,7 @@ public partial class MainForm
         });
         _mainWarehouseGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
-            DataPropertyName = nameof(MainWarehouseRow.BatchLabel),
+            DataPropertyName = nameof(MainWarehouseGridRowDto.BatchLabel),
             HeaderText = "دفعة الشراء",
             FillWeight = 7,
             MinimumWidth = 60,
@@ -899,7 +897,7 @@ public partial class MainForm
         });
         _mainWarehouseGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
-            DataPropertyName = nameof(MainWarehouseRow.InventoryName),
+            DataPropertyName = nameof(MainWarehouseGridRowDto.InventoryName),
             HeaderText = "اسم المنتج",
             FillWeight = 14,
             MinimumWidth = 110,
@@ -907,7 +905,7 @@ public partial class MainForm
         });
         _mainWarehouseGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
-            DataPropertyName = nameof(MainWarehouseRow.ProductionDate),
+            DataPropertyName = nameof(MainWarehouseGridRowDto.ProductionDate),
             HeaderText = "تاريخ الانتاج",
             FillWeight = 12,
             MinimumWidth = 110,
@@ -916,7 +914,7 @@ public partial class MainForm
         });
         _mainWarehouseGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
-            DataPropertyName = nameof(MainWarehouseRow.PurchasedQuantity),
+            DataPropertyName = nameof(MainWarehouseGridRowDto.PurchasedQuantity),
             HeaderText = "كمية الشراء",
             FillWeight = 10,
             MinimumWidth = 92,
@@ -925,7 +923,7 @@ public partial class MainForm
         });
         _mainWarehouseGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
-            DataPropertyName = nameof(MainWarehouseRow.OnHandAtMain),
+            DataPropertyName = nameof(MainWarehouseGridRowDto.OnHandAtMain),
             HeaderText = "المتبقي بالرئيسي",
             FillWeight = 10,
             MinimumWidth = 100,
@@ -939,7 +937,7 @@ public partial class MainForm
         });
         _mainWarehouseGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
-            DataPropertyName = nameof(MainWarehouseRow.PurchasePrice),
+            DataPropertyName = nameof(MainWarehouseGridRowDto.PurchasePrice),
             HeaderText = "سعر الشراء (تكلفة)",
             FillWeight = 11,
             MinimumWidth = 100,
@@ -948,7 +946,7 @@ public partial class MainForm
         });
         _mainWarehouseGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
-            DataPropertyName = nameof(MainWarehouseRow.PurchaseDate),
+            DataPropertyName = nameof(MainWarehouseGridRowDto.PurchaseDate),
             HeaderText = "تاريخ الشراء",
             FillWeight = 12,
             MinimumWidth = 110,
@@ -957,7 +955,7 @@ public partial class MainForm
         });
         _mainWarehouseGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
-            DataPropertyName = nameof(MainWarehouseRow.PackageSize),
+            DataPropertyName = nameof(MainWarehouseGridRowDto.PackageSize),
             HeaderText = "التعبئة",
             FillWeight = 8,
             MinimumWidth = 88,
@@ -965,7 +963,7 @@ public partial class MainForm
         });
         _mainWarehouseGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
-            DataPropertyName = nameof(MainWarehouseRow.ProductCategory),
+            DataPropertyName = nameof(MainWarehouseGridRowDto.ProductCategory),
             HeaderText = "تصنيف المنتج",
             FillWeight = 8,
             MinimumWidth = 96,
@@ -976,123 +974,7 @@ public partial class MainForm
     {
         await LoadMainWarehouseCatalogAsync();
 
-        var main = await _warehouseService.GetMainAsync();
-        if (main is null)
-        {
-            _mainWarehouseAllRows = [];
-            BindMainWarehouseGridPage(resetToFirstPage: true);
-            return;
-        }
-
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var purchases = await db.Purchases
-            .AsNoTracking()
-            .Include(x => x.Product)
-            .ThenInclude(p => p!.Company)
-            .Where(x => x.WarehouseId == main.Id)
-            .OrderByDescending(x => x.PurchaseDate)
-            .ToListAsync();
-        var rows = new List<MainWarehouseRow>();
-        // Every product that has any Purchase row must skip the legacy fallback row (even if Product navigation failed to load).
-        var productIdsWithPurchaseLine = purchases.Select(p => p.ProductId).ToHashSet();
-        var onHandByProduct = new Dictionary<int, decimal>();
-        foreach (var purchase in purchases)
-        {
-            if (purchase.Product is null) continue;
-            if (!onHandByProduct.ContainsKey(purchase.ProductId))
-                onHandByProduct[purchase.ProductId] = await _inventoryService.GetCurrentStockAsync(purchase.ProductId, main.Id);
-            var onHand = onHandByProduct[purchase.ProductId];
-            rows.Add(new MainWarehouseRow
-            {
-                ProductId = purchase.ProductId,
-                PurchaseId = purchase.Id,
-                CompanyName = purchase.Product.Company?.Name ?? string.Empty,
-                InventoryName = purchase.Product.Name,
-                ProductionDate = purchase.ProductionDate,
-                PurchasedQuantity = purchase.Quantity,
-                OnHandAtMain = onHand,
-                PurchasePrice = purchase.PurchasePrice,
-                PurchaseDate = purchase.PurchaseDate,
-                PackageSize = purchase.Product.PackageSize,
-                ProductCategory = purchase.Product.ProductCategory
-            });
-        }
-
-        // Opening/legacy stock may exist only as StockMovements (no Purchases row). Those rows used to
-        // disappear after the first purchase because the fallback ran only when Purchases was empty.
-        var products = await db.Products
-            .AsNoTracking()
-            .Include(x => x.Company)
-            .Where(x => x.IsActive)
-            .OrderBy(x => x.Name)
-            .ToListAsync();
-
-        foreach (var p in products)
-        {
-            if (productIdsWithPurchaseLine.Contains(p.Id))
-                continue;
-
-            var qty = await _inventoryService.GetCurrentStockAsync(p.Id, main.Id);
-            if (qty <= 0)
-                continue;
-
-            rows.Add(new MainWarehouseRow
-            {
-                ProductId = p.Id,
-                PurchaseId = null,
-                CompanyName = p.Company?.Name ?? string.Empty,
-                InventoryName = p.Name,
-                ProductionDate = DateTime.Today,
-                PurchasedQuantity = qty,
-                OnHandAtMain = qty,
-                PurchasePrice = 0,
-                PurchaseDate = DateTime.Today,
-                PackageSize = p.PackageSize,
-                ProductCategory = p.ProductCategory
-            });
-        }
-
-        rows.Sort(static (a, b) =>
-        {
-            var ad = a.PurchaseDate;
-            var bd = b.PurchaseDate;
-            var cmp = bd.CompareTo(ad);
-            if (cmp != 0)
-                return cmp;
-            var idA = a.PurchaseId ?? 0;
-            var idB = b.PurchaseId ?? 0;
-            var idCmp = idB.CompareTo(idA);
-            if (idCmp != 0)
-                return idCmp;
-            return string.Compare(a.InventoryName, b.InventoryName, StringComparison.OrdinalIgnoreCase);
-        });
-
-        foreach (var g in rows.Where(r => r.PurchaseId.HasValue).GroupBy(r => r.ProductId))
-        {
-            var ordered = g.OrderBy(r => r.PurchaseDate).ThenBy(r => r.PurchaseId!.Value).ToList();
-            var total = ordered.Count;
-            for (var i = 0; i < total; i++)
-            {
-                ordered[i].BatchNumber = i + 1;
-                ordered[i].BatchTotal = total;
-                ordered[i].BatchLabel = total > 1 ? $"{i + 1}/{total}" : string.Empty;
-            }
-        }
-
-        // One "on hand" total per product: same SKU can have multiple purchase lines; show the total only on the newest line.
-        foreach (var group in rows.Where(r => r.ProductId != 0).GroupBy(r => r.ProductId))
-        {
-            var keeper = group
-                .OrderByDescending(r => r.PurchaseDate)
-                .ThenByDescending(r => r.PurchaseId ?? int.MinValue)
-                .First();
-            foreach (var r in group)
-            {
-                if (!ReferenceEquals(r, keeper))
-                    r.OnHandAtMain = null;
-            }
-        }
-
+        var rows = (await _mainWarehouseAdminService.GetGridRowsAsync()).ToList();
         _mainWarehouseAllRows = rows;
         BindMainWarehouseGridPage(resetToFirstPage: true);
     }
@@ -1114,8 +996,7 @@ public partial class MainForm
         };
         if (dialog.ShowDialog() != DialogResult.OK) return;
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var imported = 0;
+        var lines = new List<MainWarehouseExcelImportLineDto>();
         using var workbook = new XLWorkbook(dialog.FileName);
         var ws = workbook.Worksheets.First();
         var lastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
@@ -1136,42 +1017,20 @@ public partial class MainForm
             if (string.IsNullOrWhiteSpace(pack)) pack = "Unit";
 
             var coName = string.IsNullOrWhiteSpace(company) ? "عام" : company.Trim();
-            var companyRow = await db.Companies.FirstOrDefaultAsync(c => c.Name == coName);
-            if (companyRow is null)
+            lines.Add(new MainWarehouseExcelImportLineDto
             {
-                companyRow = new Domain.Company { Name = coName, IsActive = true };
-                db.Companies.Add(companyRow);
-                await db.SaveChangesAsync();
-            }
-
-            var product = await db.Products.FirstOrDefaultAsync(x =>
-                x.CompanyId == companyRow.Id && x.Name == name && x.ProductCategory == category && x.PackageSize == pack);
-            if (product is null)
-            {
-                product = new Domain.Product
-                {
-                    CompanyId = companyRow.Id,
-                    Name = name,
-                    ProductCategory = category,
-                    PackageSize = pack,
-                    UnitPrice = 0,
-                    IsActive = true
-                };
-                db.Products.Add(product);
-                await db.SaveChangesAsync();
-            }
-
-            await _inventoryService.AddStockAsync(new PurchaseStockRequest(
-                product.Id,
-                qty,
-                purchasePrice,
-                productionDate,
-                purchaseDate,
-                main.Id,
-                "استيراد من Excel",
-                _currentUser.Id));
-            imported++;
+                CompanyName = coName,
+                ProductName = name,
+                Category = category,
+                PackageSize = pack,
+                Quantity = qty,
+                PurchasePrice = purchasePrice,
+                ProductionDate = productionDate,
+                PurchaseDate = purchaseDate
+            });
         }
+
+        var imported = await _mainWarehouseAdminService.ImportExcelLinesAsync(_currentUser.Id, main.Id, lines);
 
         MessageBox.Show($"تم استيراد {imported} سطراً إلى المستودع الرئيسي.", "اكتمل الاستيراد", MessageBoxButtons.OK,
             MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, MsgRtl);
@@ -1195,8 +1054,7 @@ public partial class MainForm
         };
         if (dialog.ShowDialog() != DialogResult.OK) return;
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var products = await db.Products.AsNoTracking().Include(p => p.Company).Where(x => x.IsActive).OrderBy(x => x.Name).ToListAsync();
+        var products = (await _productCatalogService.GetProductSummariesAsync(true)).OrderBy(x => x.Name).ToList();
         using var workbook = new XLWorkbook();
         var ws = workbook.Worksheets.Add("المستودع الرئيسي");
         ws.Cell(1, 1).Value = "الشركة";
@@ -1213,7 +1071,7 @@ public partial class MainForm
         foreach (var p in products)
         {
             var qty = await _inventoryService.GetCurrentStockAsync(p.Id, main.Id);
-            ws.Cell(r, 1).Value = p.Company?.Name ?? string.Empty;
+            ws.Cell(r, 1).Value = p.CompanyName;
             ws.Cell(r, 2).Value = p.Name;
             ws.Cell(r, 3).Value = p.ProductCategory;
             ws.Cell(r, 4).Value = p.PackageSize;
@@ -1269,13 +1127,7 @@ public partial class MainForm
         var quantity = ReadCommittedNumericUpDown(_mwQuantity);
         var purchasePrice = ReadCommittedNumericUpDown(_mwPurchasePrice);
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var purchase = await db.Purchases.FirstOrDefaultAsync(x => x.Id == _selectedMainPurchaseId.Value);
-        if (purchase is null) return;
-        var product = await db.Products.FirstOrDefaultAsync(x => x.Id == purchase.ProductId);
-        if (product is null) return;
-
-        if (_mwProductLookup.SelectedItem is not MainWarehouseCatalogRow catalogRow || catalogRow.Id != product.Id)
+        if (_mwProductLookup.SelectedItem is not MainWarehouseCatalogEntryDto catalogRow)
         {
             MessageBox.Show(
                 "يجب أن يطابق الصنف المختار سطر الشراء. لشراء نفس المنتج بدفعة جديدة استخدم «إضافة» لا «تعديل».",
@@ -1287,51 +1139,38 @@ public partial class MainForm
             return;
         }
 
-        product.Name = catalogRow.Name;
-        product.CompanyId = catalogRow.CompanyId;
-        product.ProductCategory = catalogRow.ProductCategory;
-        product.PackageSize = catalogRow.PackageSize;
-
-        purchase.Quantity = quantity;
-        purchase.PurchasePrice = purchasePrice;
-        purchase.ProductionDate = _mwProductionDate.Value.Date;
-        purchase.PurchaseDate = _mwPurchaseDate.Value.Date;
-
-        var movement = await db.StockMovements.FirstOrDefaultAsync(x =>
-            x.ReferenceId == purchase.Id &&
-            x.ProductId == purchase.ProductId &&
-            x.MovementType == Domain.StockMovementType.Purchase);
-        movement ??= await db.StockMovements.FirstOrDefaultAsync(x =>
-            x.ReferenceId == purchase.Id && x.ProductId == purchase.ProductId);
-        if (movement is not null)
+        if (_mainWarehouseGrid.CurrentRow?.DataBoundItem is MainWarehouseGridRowDto gridRow && gridRow.ProductId != catalogRow.Id)
         {
-            movement.MovementType = Domain.StockMovementType.Purchase;
-            movement.Quantity = purchase.Quantity;
-            movement.ToWarehouseId = purchase.WarehouseId;
-            movement.FromWarehouseId = null;
-            movement.Notes = "تعديل يدوي من شاشة المستودع الرئيسي";
-        }
-        else
-        {
-            db.StockMovements.Add(new Domain.StockMovement
-            {
-                ProductId = purchase.ProductId,
-                MovementType = Domain.StockMovementType.Purchase,
-                Quantity = purchase.Quantity,
-                ToWarehouseId = purchase.WarehouseId,
-                ReferenceId = purchase.Id,
-                Notes = "تعديل يدوي من شاشة المستودع الرئيسي (إنشاء حركة)"
-            });
+            MessageBox.Show(
+                "يجب أن يطابق الصنف المختار سطر الشراء. لشراء نفس المنتج بدفعة جديدة استخدم «إضافة» لا «تعديل».",
+                "تعديل",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button1,
+                MsgRtl);
+            return;
         }
 
         try
         {
-            await db.SaveChangesAsync();
+            await _mainWarehouseAdminService.UpdatePurchaseLineAsync(new UpdateMainWarehousePurchaseRequest
+            {
+                PurchaseId = _selectedMainPurchaseId.Value,
+                ProductId = catalogRow.Id,
+                ProductName = catalogRow.Name,
+                CompanyId = catalogRow.CompanyId,
+                ProductCategory = catalogRow.ProductCategory,
+                PackageSize = catalogRow.PackageSize,
+                Quantity = quantity,
+                PurchasePrice = purchasePrice,
+                ProductionDate = _mwProductionDate.Value.Date,
+                PurchaseDate = _mwPurchaseDate.Value.Date
+            });
         }
-        catch (DbUpdateException ex)
+        catch (Exception ex)
         {
             MessageBox.Show(
-                "تعذر حفظ التعديل (ربما يوجد منتج آخر بنفس الاسم والفئة والعبوة).\r\n" + (ex.InnerException?.Message ?? ex.Message),
+                "تعذر حفظ التعديل.\r\n" + ex.Message,
                 "خطأ في الحفظ",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning,
@@ -1353,22 +1192,14 @@ public partial class MainForm
             return;
         }
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var purchase = await db.Purchases.FirstOrDefaultAsync(x => x.Id == _selectedMainPurchaseId.Value);
-        if (purchase is null) return;
-        var movements = await db.StockMovements
-            .Where(x => x.ReferenceId == purchase.Id && x.ProductId == purchase.ProductId)
-            .ToListAsync();
-        db.StockMovements.RemoveRange(movements);
-        db.Purchases.Remove(purchase);
         try
         {
-            await db.SaveChangesAsync();
+            await _mainWarehouseAdminService.DeletePurchaseLineAsync(_selectedMainPurchaseId.Value);
         }
-        catch (DbUpdateException ex)
+        catch (Exception ex)
         {
             MessageBox.Show(
-                "تعذر حذف السجل (ربما هناك بيانات مرتبطة).\r\n" + (ex.InnerException?.Message ?? ex.Message),
+                "تعذر حذف السجل.\r\n" + ex.Message,
                 "خطأ في الحفظ",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning,
@@ -1381,12 +1212,12 @@ public partial class MainForm
         ClearMainWarehouseForm();
     }
 
-    private void LoadSelectedMainWarehouseRow()
+    private void LoadSelectedMainWarehouseGridRowDto()
     {
         if (_suppressMainWarehouseRowLoad || _mainWarehouseGridRefreshing) return;
         if (_mainWarehouseGrid.CurrentRow is null
             || _mainWarehouseGrid.CurrentRow.IsNewRow
-            || _mainWarehouseGrid.CurrentRow.DataBoundItem is not MainWarehouseRow row)
+            || _mainWarehouseGrid.CurrentRow.DataBoundItem is not MainWarehouseGridRowDto row)
         {
             _selectedMainPurchaseId = null;
             SyncMainWarehouseCommandStates();
@@ -1443,26 +1274,12 @@ public partial class MainForm
 
     private async Task LoadMainWarehouseCatalogAsync()
     {
-        int? keepId = _mwProductLookup.SelectedItem is MainWarehouseCatalogRow r ? r.Id : null;
+        int? keepId = _mwProductLookup.SelectedItem is MainWarehouseCatalogEntryDto r ? r.Id : null;
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var plist = await db.Products.AsNoTracking()
-            .Where(x => x.IsActive)
-            .Include(x => x.Company)
-            .OrderBy(x => x.Company!.Name)
-            .ThenBy(x => x.Name)
-            .ToListAsync();
-        var list = plist.Select(p => new MainWarehouseCatalogRow
-        {
-            Id = p.Id,
-            CompanyId = p.CompanyId,
-            CompanyName = p.Company?.Name ?? string.Empty,
-            Name = p.Name,
-            ProductCategory = p.ProductCategory,
-            PackageSize = p.PackageSize
-        }).ToList();
+        var entries = await _mainWarehouseAdminService.GetCatalogEntriesAsync();
+        var list = entries.ToList();
 
-        var bulkComboList = new List<MainWarehouseCatalogRow>
+        var bulkComboList = new List<MainWarehouseCatalogEntryDto>
         {
             new() { Id = 0, IsPlaceholder = true }
         };
@@ -1473,8 +1290,8 @@ public partial class MainForm
         try
         {
             _mwProductLookup.DataSource = null;
-            _mwProductLookup.DisplayMember = nameof(MainWarehouseCatalogRow.Caption);
-            _mwProductLookup.ValueMember = nameof(MainWarehouseCatalogRow.Id);
+            _mwProductLookup.DisplayMember = nameof(MainWarehouseCatalogEntryDto.Caption);
+            _mwProductLookup.ValueMember = nameof(MainWarehouseCatalogEntryDto.Id);
             _mwProductLookup.DataSource = list;
             if (keepId is > 0)
                 SelectMainWarehouseCatalogByProductId(keepId.Value);
@@ -1496,7 +1313,7 @@ public partial class MainForm
         if (_mwProductLookup.Items.Count == 0) return;
         for (var i = 0; i < _mwProductLookup.Items.Count; i++)
         {
-            if (_mwProductLookup.Items[i] is MainWarehouseCatalogRow row && row.Id == productId)
+            if (_mwProductLookup.Items[i] is MainWarehouseCatalogEntryDto row && row.Id == productId)
             {
                 _mwProductLookup.SelectedIndex = i;
                 return;
@@ -1579,7 +1396,7 @@ public partial class MainForm
     private async Task SyncMainWarehouseBranchPricePanelAsync()
     {
         if (_mwBranchPriceWarehouseCombo.Items.Count == 0) return;
-        if (_mwProductLookup.SelectedItem is not MainWarehouseCatalogRow row) return;
+        if (_mwProductLookup.SelectedItem is not MainWarehouseCatalogEntryDto row) return;
         if (!TryGetWarehouseIdFromCombo(_mwBranchPriceWarehouseCombo, out var whId)) return;
         var eff = await _inventoryService.GetEffectiveSalePriceAsync(row.Id, whId);
         _mwBranchRetailOverride.Value = Math.Clamp(eff, _mwBranchRetailOverride.Minimum, _mwBranchRetailOverride.Maximum);
@@ -1587,7 +1404,7 @@ public partial class MainForm
 
     private async Task SaveMainWarehouseBranchPriceAsync()
     {
-        if (_mwProductLookup.SelectedItem is not MainWarehouseCatalogRow row)
+        if (_mwProductLookup.SelectedItem is not MainWarehouseCatalogEntryDto row)
         {
             MessageBox.Show("اختر صنفاً من الكتالوج.", "سعر الفرع", MessageBoxButtons.OK, MessageBoxIcon.Warning,
                 MessageBoxDefaultButton.Button1, MsgRtl);
@@ -1617,7 +1434,7 @@ public partial class MainForm
 
     private async Task ResetMainWarehouseBranchPriceAsync()
     {
-        if (_mwProductLookup.SelectedItem is not MainWarehouseCatalogRow row)
+        if (_mwProductLookup.SelectedItem is not MainWarehouseCatalogEntryDto row)
         {
             MessageBox.Show("اختر صنفاً من الكتالوج.", "سعر الفرع", MessageBoxButtons.OK, MessageBoxIcon.Warning,
                 MessageBoxDefaultButton.Button1, MsgRtl);
@@ -1665,50 +1482,5 @@ public partial class MainForm
         }
 
         StyleMainWarehouseGrid();
-    }
-    private sealed class MainWarehouseCatalogRow
-    {
-        public int Id { get; set; }
-        public int CompanyId { get; set; }
-        public string CompanyName { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public string ProductCategory { get; set; } = string.Empty;
-        public string PackageSize { get; set; } = string.Empty;
-        /// <summary>When true, shown as the empty option in bulk purchase line combos.</summary>
-        public bool IsPlaceholder { get; set; }
-        public string Caption =>
-            IsPlaceholder
-                ? "— اختر الصنف —"
-                : string.IsNullOrWhiteSpace(CompanyName)
-                    ? $"{Name} — {ProductCategory} / {PackageSize}"
-                    : $"{CompanyName} — {Name} ({ProductCategory}, {PackageSize})";
-    }
-
-    private sealed class MainWarehouseRow
-    {
-        /// <summary>Used to collapse duplicate &quot;on hand&quot; totals when several purchase lines exist for one SKU.</summary>
-        public int ProductId { get; set; }
-
-        public int? PurchaseId { get; set; }
-
-        /// <summary>1-based index among purchase lines for this <see cref="ProductId"/> (chronological).</summary>
-        public int BatchNumber { get; set; }
-
-        /// <summary>How many purchase rows exist for this product at main.</summary>
-        public int BatchTotal { get; set; }
-
-        /// <summary>Populated when multiple purchases share one product, e.g. <c>1/2</c>, <c>2/2</c>.</summary>
-        public string BatchLabel { get; set; } = string.Empty;
-
-        public string CompanyName { get; set; } = string.Empty;
-        public string InventoryName { get; set; } = string.Empty;
-        public DateTime ProductionDate { get; set; }
-        public decimal PurchasedQuantity { get; set; }
-        /// <summary>Total on-hand at Main for this product; null on extra lines for the same product (same value otherwise).</summary>
-        public decimal? OnHandAtMain { get; set; }
-        public decimal PurchasePrice { get; set; }
-        public DateTime PurchaseDate { get; set; }
-        public string ProductCategory { get; set; } = string.Empty;
-        public string PackageSize { get; set; } = string.Empty;
     }
 }

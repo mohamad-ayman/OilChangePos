@@ -1,7 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
 using ClosedXML.Excel;
 using OilChangePOS.Business;
-using OilChangePOS.Data;
 using OilChangePOS.Domain;
 using System.Globalization;
 
@@ -225,19 +223,16 @@ public partial class MainForm : Form
             return;
         }
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var products = await db.Products.AsNoTracking()
-            .Include(p => p.Company)
-            .Where(x => x.IsActive)
-            .OrderBy(x => x.Company!.Name)
+        var products = (await _productCatalogService.GetProductSummariesAsync(true))
+            .OrderBy(x => x.CompanyName)
             .ThenBy(x => x.Name)
-            .ToListAsync();
+            .ToList();
         var list = new List<TransferProductRow>();
         foreach (var p in products)
         {
             var qty = await _inventoryService.GetCurrentStockAsync(p.Id, fromWarehouseId);
             if (qty <= 0) continue;
-            var cname = p.Company?.Name ?? string.Empty;
+            var cname = p.CompanyName;
             var label = string.IsNullOrWhiteSpace(cname) ? p.Name : $"{cname} — {p.Name}";
             list.Add(new TransferProductRow
             {
@@ -355,15 +350,14 @@ public partial class MainForm : Form
         if (_currentUser.Role == UserRole.Admin)
             await RefreshCompanyComboBoxesAsync();
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var products = await db.Products.AsNoTracking().Include(p => p.Company).ToListAsync();
+        var products = (await _productCatalogService.GetProductSummariesAsync(false)).ToList();
         var productIds = products.ConvertAll(p => p.Id);
         var overrides = await _inventoryService.GetBranchSalePriceOverridesAsync(warehouseId, productIds);
         var rows = new List<InventoryRow>();
         foreach (var p in products)
         {
             var stock = await _inventoryService.GetCurrentStockAsync(p.Id, warehouseId);
-            var cn = p.Company?.Name ?? string.Empty;
+            var cn = p.CompanyName;
             var display = string.IsNullOrWhiteSpace(cn) ? p.Name : $"{cn} — {p.Name}";
             var effective = overrides.TryGetValue(p.Id, out var o) ? o : p.UnitPrice;
             rows.Add(new InventoryRow
@@ -395,8 +389,7 @@ public partial class MainForm : Form
             return;
         }
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var products = await db.Products.AsNoTracking().ToListAsync();
+        var products = (await _productCatalogService.GetProductSummariesAsync(false)).ToList();
         var rows = new List<AuditRow>();
         foreach (var p in products)
         {
@@ -759,33 +752,21 @@ public partial class MainForm : Form
             return;
         }
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        if (await db.Products.AnyAsync(x =>
-                x.CompanyId == companyId && x.Name == name && x.ProductCategory == _newProductType.Text &&
-                x.PackageSize == _newProductPackageSize.Text))
+        if (await _catalogAdminService.PosTabProductExistsAsync(companyId, name, _newProductType.Text, _newProductPackageSize.Text))
         {
             MessageBox.Show("الصنف موجود مسبقاً لهذه الشركة والنوع والعبوة.", "صنف جديد", MessageBoxButtons.OK,
                 MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, MsgRtl);
             return;
         }
 
-        var product = new Domain.Product
-        {
-            CompanyId = companyId,
-            Name = name,
-            ProductCategory = _newProductType.Text,
-            PackageSize = _newProductPackageSize.Text,
-            UnitPrice = _newProductPrice.Value,
-            IsActive = true
-        };
-        db.Products.Add(product);
-        await db.SaveChangesAsync();
+        var newProductId = await _catalogAdminService.CreatePosTabProductAsync(
+            companyId, name, _newProductType.Text, _newProductPackageSize.Text, _newProductPrice.Value);
 
         if (_newProductOpeningStock.Value > 0)
         {
             var mainWarehouse = await _warehouseService.GetMainAsync();
             if (mainWarehouse is null) throw new InvalidOperationException("لم يُعثر على المستودع الرئيسي.");
-            await _inventoryService.AddStockAsync(new PurchaseStockRequest(product.Id, _newProductOpeningStock.Value, _newProductPrice.Value, DateTime.Today, DateTime.Today, mainWarehouse.Id, "رصيد افتتاحي لصنف جديد", _currentUser.Id));
+            await _inventoryService.AddStockAsync(new PurchaseStockRequest(newProductId, _newProductOpeningStock.Value, _newProductPrice.Value, DateTime.Today, DateTime.Today, mainWarehouse.Id, "رصيد افتتاحي لصنف جديد", _currentUser.Id));
         }
 
         if (!string.IsNullOrWhiteSpace(_pendingImagePath) && File.Exists(_pendingImagePath))
@@ -793,9 +774,9 @@ public partial class MainForm : Form
             var imagesDir = Path.Combine(AppContext.BaseDirectory, "product-images");
             Directory.CreateDirectory(imagesDir);
             var ext = Path.GetExtension(_pendingImagePath);
-            var target = Path.Combine(imagesDir, $"product-{product.Id}{ext}");
+            var target = Path.Combine(imagesDir, $"product-{newProductId}{ext}");
             File.Copy(_pendingImagePath, target, overwrite: true);
-            _productImageMap[product.Id] = target;
+            _productImageMap[newProductId] = target;
             SaveProductImageMap();
         }
 

@@ -1,7 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
 using ClosedXML.Excel;
 using OilChangePOS.Business;
-using OilChangePOS.Data;
 using OilChangePOS.Domain;
 using System.Globalization;
 
@@ -11,7 +9,6 @@ public partial class MainForm : Form
 {
 
     public MainForm(
-        IDbContextFactory<OilChangePosDbContext> dbFactory,
         ISalesService salesService,
         IInventoryService inventoryService,
         IReportService reportService,
@@ -20,9 +17,14 @@ public partial class MainForm : Form
         IWarehouseService warehouseService,
         ICustomerService customerService,
         IAuthService authService,
+        ICatalogAdminService catalogAdminService,
+        IMainWarehouseAdminService mainWarehouseAdminService,
+        IProductCatalogService productCatalogService,
         AppUser currentUser)
     {
-        _dbFactory = dbFactory;
+        _catalogAdminService = catalogAdminService;
+        _mainWarehouseAdminService = mainWarehouseAdminService;
+        _productCatalogService = productCatalogService;
         _salesService = salesService;
         _inventoryService = inventoryService;
         _reportService = reportService;

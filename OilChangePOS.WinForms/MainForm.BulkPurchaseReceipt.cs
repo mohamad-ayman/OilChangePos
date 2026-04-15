@@ -204,8 +204,8 @@ public partial class MainForm
             Name = nameof(BulkPurchaseLineModel.ProductId),
             DataPropertyName = nameof(BulkPurchaseLineModel.ProductId),
             HeaderText = "الصنف",
-            DisplayMember = nameof(MainWarehouseCatalogRow.Caption),
-            ValueMember = nameof(MainWarehouseCatalogRow.Id),
+            DisplayMember = nameof(MainWarehouseCatalogEntryDto.Caption),
+            ValueMember = nameof(MainWarehouseCatalogEntryDto.Id),
             FlatStyle = FlatStyle.Flat,
             FillWeight = 36,
             MinimumWidth = 240
@@ -266,8 +266,8 @@ public partial class MainForm
             return;
         col.DataSource = null;
         col.DataSource = _bulkPurchaseProductComboDataSource;
-        col.DisplayMember = nameof(MainWarehouseCatalogRow.Caption);
-        col.ValueMember = nameof(MainWarehouseCatalogRow.Id);
+        col.DisplayMember = nameof(MainWarehouseCatalogEntryDto.Caption);
+        col.ValueMember = nameof(MainWarehouseCatalogEntryDto.Id);
     }
 
     private void ResetBulkPurchaseLines()

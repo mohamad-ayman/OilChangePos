@@ -449,4 +449,31 @@ public partial class MainForm
         split.SizeChanged += OnSized;
         OnSized(split, EventArgs.Empty);
     }
+
+    /// <summary>
+    /// With <see cref="DataGridView.RightToLeft"/> Yes, use <see cref="DataGridViewContentAlignment.MiddleLeft"/>
+    /// on headers and text cells so content sits on the physical right (mirrored alignment). Numeric/date columns
+    /// keep <see cref="DataGridViewContentAlignment.MiddleRight"/> when already formatted as numbers.
+    /// </summary>
+    private static void ApplyReportGridColumnBiDiAlignment(DataGridView grid)
+    {
+        foreach (DataGridViewColumn col in grid.Columns)
+        {
+            col.HeaderCell.Style.Alignment = DataGridViewContentAlignment.MiddleLeft;
+            var fmt = col.DefaultCellStyle.Format ?? string.Empty;
+            var align = col.DefaultCellStyle.Alignment;
+            var treatAsNumeric = align == DataGridViewContentAlignment.MiddleRight
+                                 || fmt.Contains('N', StringComparison.Ordinal)
+                                 || fmt.Contains('n', StringComparison.Ordinal);
+            col.DefaultCellStyle.Alignment = treatAsNumeric
+                ? DataGridViewContentAlignment.MiddleRight
+                : DataGridViewContentAlignment.MiddleLeft;
+        }
+    }
+
+    private sealed class ReportHistoryProductItem
+    {
+        public int Id { get; set; }
+        public string Caption { get; set; } = string.Empty;
+    }
 }

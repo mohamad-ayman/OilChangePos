@@ -63,6 +63,17 @@ public interface ISalesService
     Task<int> CompleteSaleAsync(CompleteSaleRequest request, CancellationToken cancellationToken = default);
 }
 
+/// <summary>Active catalog rows for POS/API (no EF entities on the wire).</summary>
+public record ProductListDto(int Id, string Name, string ProductCategory, string PackageSize, decimal UnitPrice, string CompanyName);
+
+public interface IProductCatalogService
+{
+    Task<IReadOnlyList<ProductListDto>> GetActiveProductsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Product rows for POS / inventory / audit (optional active-only filter).</summary>
+    Task<IReadOnlyList<ProductSummaryDto>> GetProductSummariesAsync(bool activeOnly, CancellationToken cancellationToken = default);
+}
+
 public interface IServiceOrderService
 {
     Task<int> CreateOilChangeServiceAsync(OilChangeRequest request, CancellationToken cancellationToken = default);
@@ -283,3 +294,132 @@ public record BranchSellerSalesSummaryDto(
     decimal InvoicesGrossSubtotal,
     decimal InvoicesDiscountTotal,
     decimal InvoicesNetTotal);
+
+public sealed class ProductSummaryDto
+{
+    public int Id { get; set; }
+    public int CompanyId { get; set; }
+    public string CompanyName { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string ProductCategory { get; set; } = string.Empty;
+    public string PackageSize { get; set; } = string.Empty;
+    public decimal UnitPrice { get; set; }
+    public bool IsActive { get; set; }
+}
+
+public sealed class CatalogCompanyListRowDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public bool IsActive { get; set; }
+    public int ProductCount { get; set; }
+}
+
+public sealed class CatalogProductListRowDto
+{
+    public int Id { get; set; }
+    public int CompanyId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string ProductCategory { get; set; } = string.Empty;
+    public string PackageSize { get; set; } = string.Empty;
+    public bool IsActive { get; set; }
+}
+
+public sealed class CompanyComboItemDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+}
+
+public sealed class MainWarehouseGridRowDto
+{
+    public int ProductId { get; set; }
+    public int? PurchaseId { get; set; }
+    public int BatchNumber { get; set; }
+    public int BatchTotal { get; set; }
+    public string BatchLabel { get; set; } = string.Empty;
+    public string CompanyName { get; set; } = string.Empty;
+    public string InventoryName { get; set; } = string.Empty;
+    public DateTime ProductionDate { get; set; }
+    public decimal PurchasedQuantity { get; set; }
+    public decimal? OnHandAtMain { get; set; }
+    public decimal PurchasePrice { get; set; }
+    public DateTime PurchaseDate { get; set; }
+    public string ProductCategory { get; set; } = string.Empty;
+    public string PackageSize { get; set; } = string.Empty;
+}
+
+public sealed class MainWarehouseCatalogEntryDto
+{
+    public int Id { get; set; }
+    public int CompanyId { get; set; }
+    public string CompanyName { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string ProductCategory { get; set; } = string.Empty;
+    public string PackageSize { get; set; } = string.Empty;
+    public bool IsPlaceholder { get; set; }
+    public string Caption =>
+        IsPlaceholder
+            ? "— اختر الصنف —"
+            : string.IsNullOrWhiteSpace(CompanyName)
+                ? $"{Name} — {ProductCategory} / {PackageSize}"
+                : $"{CompanyName} — {Name} ({ProductCategory}, {PackageSize})";
+}
+
+public sealed class MainWarehouseExcelImportLineDto
+{
+    public string CompanyName { get; set; } = string.Empty;
+    public string ProductName { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;
+    public string PackageSize { get; set; } = string.Empty;
+    public decimal Quantity { get; set; }
+    public decimal PurchasePrice { get; set; }
+    public DateTime ProductionDate { get; set; }
+    public DateTime PurchaseDate { get; set; }
+}
+
+public sealed class UpdateMainWarehousePurchaseRequest
+{
+    public int PurchaseId { get; set; }
+    public int ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public int CompanyId { get; set; }
+    public string ProductCategory { get; set; } = string.Empty;
+    public string PackageSize { get; set; } = string.Empty;
+    public decimal Quantity { get; set; }
+    public decimal PurchasePrice { get; set; }
+    public DateTime ProductionDate { get; set; }
+    public DateTime PurchaseDate { get; set; }
+}
+
+public sealed class BranchPriceOverrideQueryDto
+{
+    public int WarehouseId { get; set; }
+    public List<int> ProductIds { get; set; } = [];
+}
+
+public sealed class BranchPriceOverrideItemDto
+{
+    public int ProductId { get; set; }
+    public decimal SalePrice { get; set; }
+}
+
+public interface ICatalogAdminService
+{
+    Task<IReadOnlyList<CatalogCompanyListRowDto>> ListCompaniesForCatalogAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CatalogProductListRowDto>> ListProductsForCompanyAsync(int companyId, CancellationToken cancellationToken = default);
+    Task SaveCatalogCompanyAsync(bool createNew, int? existingCompanyId, string name, bool isActive, CancellationToken cancellationToken = default);
+    Task SaveCatalogProductAsync(bool createNew, int companyId, int? existingProductId, string name, string category, string package, bool isActive, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CompanyComboItemDto>> ListActiveCompaniesForComboAsync(CancellationToken cancellationToken = default);
+    Task<int> CreatePosTabProductAsync(int companyId, string name, string category, string package, decimal unitPrice, CancellationToken cancellationToken = default);
+    Task<bool> PosTabProductExistsAsync(int companyId, string name, string category, string package, CancellationToken cancellationToken = default);
+}
+
+public interface IMainWarehouseAdminService
+{
+    Task<IReadOnlyList<MainWarehouseGridRowDto>> GetGridRowsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<MainWarehouseCatalogEntryDto>> GetCatalogEntriesAsync(CancellationToken cancellationToken = default);
+    Task UpdatePurchaseLineAsync(UpdateMainWarehousePurchaseRequest request, CancellationToken cancellationToken = default);
+    Task DeletePurchaseLineAsync(int purchaseId, CancellationToken cancellationToken = default);
+    Task<int> ImportExcelLinesAsync(int userId, int mainWarehouseId, IReadOnlyList<MainWarehouseExcelImportLineDto> lines, CancellationToken cancellationToken = default);
+}

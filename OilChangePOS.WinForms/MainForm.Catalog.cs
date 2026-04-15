@@ -1,7 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
 using ClosedXML.Excel;
 using OilChangePOS.Business;
-using OilChangePOS.Data;
 using OilChangePOS.Domain;
 using System.Globalization;
 
@@ -392,17 +390,14 @@ public partial class MainForm : Form
 
         await RefreshCompanyComboBoxesAsync();
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
-        var companies = await db.Companies.AsNoTracking()
-            .OrderBy(c => c.Name)
-            .Select(c => new CatalogCompanyRow
-            {
-                Id = c.Id,
-                Name = c.Name,
-                IsActive = c.IsActive,
-                ProductCount = db.Products.Count(p => p.CompanyId == c.Id)
-            })
-            .ToListAsync();
+        var companyDtos = await _catalogAdminService.ListCompaniesForCatalogAsync();
+        var companies = companyDtos.Select(c => new CatalogCompanyRow
+        {
+            Id = c.Id,
+            Name = c.Name,
+            IsActive = c.IsActive,
+            ProductCount = c.ProductCount
+        }).ToList();
 
         _suppressCatalogCompanyLoad = true;
         try
@@ -459,21 +454,17 @@ public partial class MainForm : Form
             return;
         }
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
         var cid = _selectedCatalogCompanyId.Value;
-        var products = await db.Products.AsNoTracking()
-            .Where(p => p.CompanyId == cid)
-            .OrderBy(p => p.Name)
-            .Select(p => new CatalogProductRow
-            {
-                Id = p.Id,
-                CompanyId = p.CompanyId,
-                Name = p.Name,
-                ProductCategory = p.ProductCategory,
-                PackageSize = p.PackageSize,
-                IsActive = p.IsActive
-            })
-            .ToListAsync();
+        var productDtos = await _catalogAdminService.ListProductsForCompanyAsync(cid);
+        var products = productDtos.Select(p => new CatalogProductRow
+        {
+            Id = p.Id,
+            CompanyId = p.CompanyId,
+            Name = p.Name,
+            ProductCategory = p.ProductCategory,
+            PackageSize = p.PackageSize,
+            IsActive = p.IsActive
+        }).ToList();
 
         _suppressCatalogProductLoad = true;
         try
@@ -592,51 +583,23 @@ public partial class MainForm : Form
             return;
         }
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
         try
         {
+            await _catalogAdminService.SaveCatalogCompanyAsync(createNew, _selectedCatalogCompanyId, name, _catalogCompanyActiveEdit.Checked);
+            MessageBox.Show(createNew ? "تمت إضافة الشركة." : "تم حفظ الشركة.", "الكتالوج", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, MsgRtl);
             if (createNew)
             {
-                if (await db.Companies.AnyAsync(c => c.Name == name))
-                {
-                    MessageBox.Show("هذه الشركة موجودة بالفعل.", "الكتالوج", MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, MsgRtl);
-                    return;
-                }
-
-                var created = new Domain.Company { Name = name, IsActive = _catalogCompanyActiveEdit.Checked };
-                db.Companies.Add(created);
-                await db.SaveChangesAsync();
-                _selectedCatalogCompanyId = created.Id;
-                MessageBox.Show("تمت إضافة الشركة.", "الكتالوج", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, MsgRtl);
-            }
-            else
-            {
-                if (!_selectedCatalogCompanyId.HasValue)
-                {
-                    MessageBox.Show("اختر شركة من الجدول أو استخدم «إضافة شركة».", "الكتالوج", MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, MsgRtl);
-                    return;
-                }
-
-                var company = await db.Companies.FirstOrDefaultAsync(c => c.Id == _selectedCatalogCompanyId.Value);
-                if (company is null) return;
-                if (!string.Equals(company.Name, name, StringComparison.Ordinal) &&
-                    await db.Companies.AnyAsync(c => c.Name == name && c.Id != company.Id))
-                {
-                    MessageBox.Show("اسم الشركة مستخدم من شركة أخرى.", "الكتالوج", MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, MsgRtl);
-                    return;
-                }
-
-                company.Name = name;
-                company.IsActive = _catalogCompanyActiveEdit.Checked;
-                await db.SaveChangesAsync();
-                MessageBox.Show("تم حفظ الشركة.", "الكتالوج", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, MsgRtl);
+                var refreshed = await _catalogAdminService.ListCompaniesForCatalogAsync();
+                var match = refreshed.FirstOrDefault(c => c.Name == name);
+                if (match is not null)
+                    _selectedCatalogCompanyId = match.Id;
             }
 
             await RefreshCatalogGridsAsync();
         }
-        catch (DbUpdateException ex)
+        catch (Exception ex)
         {
-            MessageBox.Show(ex.InnerException?.Message ?? ex.Message, "الكتالوج", MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, MsgRtl);
+            MessageBox.Show(ex.Message, "الكتالوج", MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, MsgRtl);
         }
     }
 
@@ -661,79 +624,31 @@ public partial class MainForm : Form
         var package = _catalogProductPackCombo.Text;
         var companyId = _selectedCatalogCompanyId.Value;
 
-        await using var db = await _dbFactory.CreateDbContextAsync();
         try
         {
+            await _catalogAdminService.SaveCatalogProductAsync(createNew, companyId, _selectedCatalogProductId, pname, category, package, _catalogProductActiveEdit.Checked);
+            MessageBox.Show(createNew ? "تمت إضافة الصنف." : "تم حفظ الصنف.", "الكتالوج", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, MsgRtl);
             if (createNew)
             {
-                if (await db.Products.AnyAsync(p =>
-                        p.CompanyId == companyId && p.Name == pname && p.ProductCategory == category && p.PackageSize == package))
-                {
-                    MessageBox.Show("هذا الصنف موجود بالفعل لهذه الشركة.", "الكتالوج", MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, MsgRtl);
-                    return;
-                }
-
-                var product = new Domain.Product
-                {
-                    CompanyId = companyId,
-                    Name = pname,
-                    ProductCategory = category,
-                    PackageSize = package,
-                    UnitPrice = 0,
-                    IsActive = _catalogProductActiveEdit.Checked
-                };
-                db.Products.Add(product);
-                await db.SaveChangesAsync();
-                _selectedCatalogProductId = product.Id;
-                MessageBox.Show("تمت إضافة الصنف.", "الكتالوج", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, MsgRtl);
-            }
-            else
-            {
-                if (!_selectedCatalogProductId.HasValue)
-                {
-                    MessageBox.Show("اختر صنفاً من الجدول أو استخدم «إضافة صنف».", "الكتالوج", MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, MsgRtl);
-                    return;
-                }
-
-                var product = await db.Products.FirstOrDefaultAsync(p => p.Id == _selectedCatalogProductId.Value);
-                if (product is null || product.CompanyId != companyId)
-                {
-                    MessageBox.Show("صنف غير صالح.", "الكتالوج", MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, MsgRtl);
-                    return;
-                }
-
-                if (await db.Products.AnyAsync(p =>
-                        p.CompanyId == companyId && p.Name == pname && p.ProductCategory == category && p.PackageSize == package &&
-                        p.Id != product.Id))
-                {
-                    MessageBox.Show("هناك صنف آخر بنفس الاسم والنوع والعبوة.", "الكتالوج", MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, MsgRtl);
-                    return;
-                }
-
-                product.Name = pname;
-                product.ProductCategory = category;
-                product.PackageSize = package;
-                product.IsActive = _catalogProductActiveEdit.Checked;
-                await db.SaveChangesAsync();
-                MessageBox.Show("تم حفظ الصنف.", "الكتالوج", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, MsgRtl);
+                var plist = await _catalogAdminService.ListProductsForCompanyAsync(companyId);
+                var match = plist.FirstOrDefault(p =>
+                    p.Name == pname && p.ProductCategory == category && p.PackageSize == package);
+                if (match is not null)
+                    _selectedCatalogProductId = match.Id;
             }
 
             await RefreshCatalogGridsAsync();
         }
-        catch (DbUpdateException ex)
+        catch (Exception ex)
         {
-            MessageBox.Show(ex.InnerException?.Message ?? ex.Message, "الكتالوج", MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, MsgRtl);
+            MessageBox.Show(ex.Message, "الكتالوج", MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, MsgRtl);
         }
     }
 
     private async Task RefreshCompanyComboBoxesAsync()
     {
-        await using var dbCo = await _dbFactory.CreateDbContextAsync();
-        var companies = await dbCo.Companies.AsNoTracking()
-            .Where(c => c.IsActive)
-            .OrderBy(c => c.Name)
-            .Select(c => new CompanyListItem { Id = c.Id, Name = c.Name })
-            .ToListAsync();
+        var comboDtos = await _catalogAdminService.ListActiveCompaniesForComboAsync();
+        var companies = comboDtos.Select(c => new CompanyListItem { Id = c.Id, Name = c.Name }).ToList();
 
         _newProductCompanyCombo.DataSource = null;
         _newProductCompanyCombo.DisplayMember = nameof(CompanyListItem.Name);

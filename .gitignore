@@ -3,6 +3,9 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+# Single solution: use OilChangePOS.sln. `dotnet new sln` (SDK default) also creates *.slnx — ignore to avoid duplicate/confusion.
+*.slnx
+
 # User-specific files
 *.rsuser
 *.suo

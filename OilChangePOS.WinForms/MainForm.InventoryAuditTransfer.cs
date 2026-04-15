@@ -1,12 +1,9 @@
-using Microsoft.EntityFrameworkCore;
-using ClosedXML.Excel;
+﻿using ClosedXML.Excel;
 using OilChangePOS.Business;
-using OilChangePOS.Data;
 using OilChangePOS.Domain;
 using System.Globalization;
 
 namespace OilChangePOS.WinForms;
-
 public partial class MainForm : Form
 {
 
@@ -208,7 +205,6 @@ public partial class MainForm : Form
         return tab;
     }
 
-
     private TabPage BuildAuditTab()
     {
         var tab = new TabPage("جرد المخزون");
@@ -349,7 +345,7 @@ public partial class MainForm : Form
         var root = new Panel { Dock = DockStyle.Fill, Padding = new Padding(24, 20, 24, 20), BackColor = Color.FromArgb(245, 247, 250), RightToLeft = RightToLeft.No, AutoScroll = true };
         var transferHeader = BuildStandardModuleHeaderCard(
             "تحويل بين المستودعات",
-            "المستودع الرئيسي يستقبل المشتريات؛ لكل فرع رصيده. التحويل من الرئيسي للفرع يستهلك أقدم تاريخ إنتاج أولاً (FEFO) وقد يظهر عدة أسطر في السجل. التحويل بين الفروع غير مسموح. اختر «من المستودع» أولاً؛ الأصناف المعروضة لها رصيد هناك. عند التحويل من الرئيسي إلى فرع يمكنك اختيارياً تحديث سعر البيع في نقطة بيع ذلك الفرع.",
+            "المستودع الرئيسي يستقبل المشتريات؛ لكل فرع رصيده. التحويل من الرئيسي للفرع يستهلك أقدم تاريخ إنتاج أولاً (FEFO) وقد يظهر عدة أسطر في السجل. التحويل بين الفروع غير مسموح. اختر «من المستودع» أولاً؛ الأصناف المعروضة لها رصيد هناك.",
             subtitleItalic: true,
             DockStyle.Top,
             autoSizeHeight: true,
@@ -357,21 +353,15 @@ public partial class MainForm : Form
             out _);
         transferHeader.Margin = new Padding(0, 0, 0, 12);
 
-        _transferFromWarehouseCombo.SelectedIndexChanged += async (_, _) =>
-        {
-            await RefreshTransferProductsAsync();
-            await RefreshTransferBranchPriceRowAsync();
-        };
+        _transferFromWarehouseCombo.SelectedIndexChanged += async (_, _) => await RefreshTransferProductsAsync();
         _transferToWarehouseCombo.SelectedIndexChanged += async (_, _) => await RefreshTransferBranchPriceRowAsync();
-        _transferProductCombo.SelectedIndexChanged += (_, _) =>
+        _transferProductCombo.SelectedIndexChanged += async (_, _) =>
         {
             SyncTransferQtyLimitFromSelection();
-            _ = RefreshTransferBranchPriceRowAsync();
+            await RefreshTransferBranchPriceRowAsync();
         };
-        _transferApplyBranchSalePriceCheck.CheckedChanged += async (_, _) =>
-        {
-            await OnTransferApplyBranchSalePriceCheckChangedAsync();
-        };
+        _transferApplyBranchSalePriceCheck.CheckedChanged += async (_, _) => await OnTransferApplyBranchSalePriceCheckChangedAsync();
+
         var form = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
@@ -391,9 +381,9 @@ public partial class MainForm : Form
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
-        form.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        form.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
-        form.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        form.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
 
         var transferButton = BuildButton("تنفيذ التحويل", Color.FromArgb(41, 128, 185));
@@ -408,11 +398,10 @@ public partial class MainForm : Form
         form.Controls.Add(_transferProductCombo, 1, 2);
         form.Controls.Add(new Label { Text = "الكمية", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill, Font = UiFontCaption, ForeColor = UiTextPrimary, RightToLeft = RightToLeft.Yes }, 0, 3);
         form.Controls.Add(_transferQty, 1, 3);
-        form.SetColumnSpan(_transferApplyBranchSalePriceCheck, 2);
-        form.Controls.Add(_transferApplyBranchSalePriceCheck, 0, 4);
+        form.Controls.Add(_transferApplyBranchSalePriceCheck, 1, 4);
         form.Controls.Add(new Label
         {
-            Text = "سعر البيع في فرع الوجهة (ج.م)",
+            Text = "سعر البيع في الفرع (ج.م)",
             TextAlign = ContentAlignment.MiddleRight,
             Dock = DockStyle.Fill,
             Font = UiFontCaption,
@@ -429,6 +418,5 @@ public partial class MainForm : Form
         tab.Controls.Add(root);
         return tab;
     }
-
 }
 
