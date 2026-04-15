@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using ClosedXML.Excel;
 using OilChangePOS.Business;
 using OilChangePOS.Data;
 using OilChangePOS.Domain;
@@ -6,8 +7,9 @@ using System.Globalization;
 
 namespace OilChangePOS.WinForms;
 
-public partial class MainForm
+public partial class MainForm : Form
 {
+
     private TabPage BuildCatalogTab()
     {
         var tab = new TabPage("الشركات والأصناف");
@@ -591,6 +593,7 @@ public partial class MainForm
         if (companies.Count > 0)
             _newProductCompanyCombo.SelectedIndex = 0;
     }
+
     private sealed class CatalogCompanyRow
     {
         public int Id { get; set; }
@@ -614,4 +617,6 @@ public partial class MainForm
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
     }
+
 }
+

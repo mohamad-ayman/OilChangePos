@@ -138,19 +138,20 @@ public partial class MainForm
             inner.RightToLeft = RightToLeft.Yes;
         inner.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
         inner.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-        var capAlign = reportsRtl ? ContentAlignment.BottomRight : ContentAlignment.BottomLeft;
-        var valAlign = reportsRtl ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
+        // RTL inner panel mirrors alignment: BottomLeft / MiddleLeft place text on the physical right edge.
         inner.Controls.Add(new Label
         {
             Text = caption,
             Dock = DockStyle.Fill,
             ForeColor = UiTextSecondary,
             Font = UiFontCaption,
-            TextAlign = capAlign,
+            TextAlign = ContentAlignment.BottomLeft,
             RightToLeft = reportsRtl ? RightToLeft.Yes : RightToLeft.No
         }, 0, 0);
         valueLabel.Dock = DockStyle.Fill;
-        valueLabel.TextAlign = valAlign;
+        // LTR on the value: avoids WinForms mirroring MiddleRight→visual-left when the label itself is RTL.Yes.
+        valueLabel.RightToLeft = RightToLeft.No;
+        valueLabel.TextAlign = ContentAlignment.MiddleRight;
         valueLabel.ForeColor = accent;
         inner.Controls.Add(valueLabel, 0, 1);
         wrap.Controls.Add(inner);
@@ -327,14 +328,19 @@ public partial class MainForm
         grid.Font = UiGridCell;
     }
 
-    /// <summary>Arabic/RTL report grids: mirroring, headers and text cells right-aligned.</summary>
+    /// <summary>
+    /// Arabic report grids: <see cref="Control.RightToLeft"/> mirrors the client area, so
+    /// <see cref="DataGridViewContentAlignment.MiddleRight"/> paints on the visual left; use
+    /// <see cref="DataGridViewContentAlignment.MiddleLeft"/> so values and headers sit on the reading edge (physical right).
+    /// </summary>
     private static void StyleReportGrid(DataGridView grid)
     {
         StyleGrid(grid);
         grid.RightToLeft = RightToLeft.Yes;
-        grid.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
-        grid.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
-        grid.AlternatingRowsDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+        grid.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
+        grid.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
+        grid.AlternatingRowsDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
+        grid.RowsDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
     }
 
     /// <summary>Equal-size pill for report module tabs (Arabic/RTL); pairs with Excel on the same row.</summary>

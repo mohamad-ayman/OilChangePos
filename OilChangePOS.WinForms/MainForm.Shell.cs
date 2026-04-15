@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using ClosedXML.Excel;
 using OilChangePOS.Business;
 using OilChangePOS.Data;
 using OilChangePOS.Domain;
@@ -6,8 +7,149 @@ using System.Globalization;
 
 namespace OilChangePOS.WinForms;
 
-public partial class MainForm
+public partial class MainForm : Form
 {
+
+    public MainForm(
+        IDbContextFactory<OilChangePosDbContext> dbFactory,
+        ISalesService salesService,
+        IInventoryService inventoryService,
+        IReportService reportService,
+        IExpenseService expenseService,
+        ITransferService transferService,
+        IWarehouseService warehouseService,
+        ICustomerService customerService,
+        AppUser currentUser)
+    {
+        _dbFactory = dbFactory;
+        _salesService = salesService;
+        _inventoryService = inventoryService;
+        _reportService = reportService;
+        _expenseService = expenseService;
+        _transferService = transferService;
+        _warehouseService = warehouseService;
+        _customerService = customerService;
+        _currentUser = currentUser;
+
+        RightToLeft = RightToLeft.Yes;
+        RightToLeftLayout = true;
+        Text = "نظام نقطة بيع تغيير الزيت والمخزون";
+        Width = 1500;
+        Height = 900;
+        MinimumSize = new Size(1300, 780);
+        Font = UiFont;
+        StartPosition = FormStartPosition.CenterScreen;
+        BackColor = Color.FromArgb(245, 247, 250);
+        KeyPreview = true;
+        KeyDown += OnMainFormKeyDown;
+        BuildUi();
+        ApplyRoleToUi();
+        ApplyUnifiedFont(this);
+        RestoreMainWarehouseFieldCaptionFonts(this);
+        ApplyReportsVisualStyle();
+        Load += async (_, _) => await LoadDataAsync();
+    }
+
+    private async void OnMainFormKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (_mainWarehouseTabPage is null || _mainTabs.SelectedTab != _mainWarehouseTabPage)
+            return;
+
+        if (_mainWarehouseGrid.IsCurrentCellInEditMode)
+            return;
+
+        if (ActiveControl == _mainWarehouseGrid && e.KeyCode == Keys.Enter)
+            return;
+
+        if (e.KeyCode == Keys.Enter && !e.Control && !e.Shift && !e.Alt)
+        {
+            if (ActiveControl is DateTimePicker)
+                return;
+
+            if (_mwCmdAdd is null || !_mwCmdAdd.Enabled)
+                return;
+
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+            await AddMainWarehouseManualAsync();
+            return;
+        }
+
+        if (e.KeyCode == Keys.Delete && _selectedMainPurchaseId.HasValue)
+        {
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+            await DeleteMainWarehouseManualAsync();
+            return;
+        }
+
+        if (e.KeyCode == Keys.E && e.Control)
+        {
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+            await ExportMainWarehouseExcelAsync();
+        }
+    }
+
+
+
+    private void ApplyRoleToUi()
+    {
+        var admin = _currentUser.Role == UserRole.Admin;
+        Text = admin
+            ? $"نقطة بيع تغيير الزيت — {_currentUser.Username} (مدير)"
+            : $"نقطة بيع تغيير الزيت — {_currentUser.Username} (فرع)";
+
+        if (admin)
+        {
+            if (_sidebarNavButtons.Count > 2)
+            {
+                _sidebarNavButtons[0].Visible = false;
+                _sidebarNavButtons[1].Visible = false;
+                _sidebarNavButtons[2].Visible = false;
+            }
+            _mainTabs.SelectedIndex = 5;
+            ApplySidebarNavHighlight(_mainTabs.SelectedIndex);
+            return;
+        }
+
+        for (var i = 3; i < _sidebarNavButtons.Count; i++)
+            _sidebarNavButtons[i].Visible = false;
+
+        _inventoryShowZeroStockCheck.Checked = true;
+        _inventoryAdminGroup.Visible = false;
+        _inventoryAddProductGroup.Visible = false;
+        _inventoryTopPanel.Height = 268;
+        _mainTabs.SelectedIndex = 0;
+        ApplySidebarNavHighlight(_mainTabs.SelectedIndex);
+    }
+
+    private void OnMainTabsSelecting(object? sender, TabControlCancelEventArgs e)
+    {
+        if (_currentUser.Role == UserRole.Admin)
+        {
+            if (e.TabPageIndex < 3)
+                e.Cancel = true;
+            return;
+        }
+
+        if (e.TabPageIndex > 2)
+            e.Cancel = true;
+    }
+
+    private void BuildUi()
+    {
+        var sidebar = BuildSidebar();
+        sidebar.Dock = DockStyle.Left;
+        sidebar.Width = 268;
+
+        var content = BuildMainContent();
+        content.Dock = DockStyle.Fill;
+
+        Controls.Add(content);
+        Controls.Add(sidebar);
+    }
+
     private Control BuildSidebar()
     {
         var panel = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(38, 43, 48) };
@@ -151,10 +293,6 @@ public partial class MainForm
         return panel;
     }
 
-    private static readonly Color SidebarNavBg = Color.FromArgb(38, 43, 48);
-    private static readonly Color SidebarNavHover = Color.FromArgb(45, 52, 62);
-    private static readonly Color SidebarNavActive = Color.FromArgb(30, 40, 50);
-
     private Button BuildMenuButton(string text, int targetTab)
     {
         var button = new Button
@@ -222,4 +360,6 @@ public partial class MainForm
             b.FlatAppearance.BorderSize = active ? 2 : 1;
         }
     }
+
 }
+

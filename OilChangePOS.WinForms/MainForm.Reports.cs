@@ -409,7 +409,7 @@ public partial class MainForm
             AutoSize = true,
             Font = UiFontCaption,
             ForeColor = UiTextPrimary,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             TextAlign = ContentAlignment.MiddleRight,
             Margin = new Padding(8, 12, 6, 8),
             UseCompatibleTextRendering = false
@@ -420,7 +420,7 @@ public partial class MainForm
             AutoSize = true,
             Font = UiFontCaption,
             ForeColor = UiTextPrimary,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             TextAlign = ContentAlignment.MiddleRight,
             Margin = new Padding(8, 12, 6, 8),
             UseCompatibleTextRendering = false
@@ -430,18 +430,19 @@ public partial class MainForm
         _branchOnlyToPicker.Margin = new Padding(4, 8, 4, 8);
         _branchOnlyToPicker.Width = 160;
         refresh.Margin = new Padding(16, 6, 8, 8);
+        // RightToLeft.No + RightToLeft flow: first added = physical right. Label before picker so caption sits on the reading side of each field.
         filterFlow.Controls.Add(refresh);
-        filterFlow.Controls.Add(_branchOnlyToPicker);
         filterFlow.Controls.Add(lblTo);
-        filterFlow.Controls.Add(_branchOnlyFromPicker);
+        filterFlow.Controls.Add(_branchOnlyToPicker);
         filterFlow.Controls.Add(lblFrom);
+        filterFlow.Controls.Add(_branchOnlyFromPicker);
 
         _branchOnlyFromPicker.ValueChanged += async (_, _) => await RefreshBranchOnlyReportsAsync();
         _branchOnlyToPicker.ValueChanged += async (_, _) => await RefreshBranchOnlyReportsAsync();
 
         chrome.Controls.Add(filterFlow, 0, 1);
 
-        var bannerHost = new Panel { Dock = DockStyle.Fill, Padding = new Padding(14, 6, 14, 4), BackColor = Color.FromArgb(245, 247, 250), RightToLeft = RightToLeft.Yes };
+        var bannerHost = new Panel { Dock = DockStyle.Fill, Padding = new Padding(14, 6, 14, 4), BackColor = Color.FromArgb(245, 247, 250), RightToLeft = RightToLeft.No };
         _branchOnlyPeriodBanner.Dock = DockStyle.Fill;
         _branchOnlyPeriodBanner.Font = UiFontSection;
         bannerHost.Controls.Add(_branchOnlyPeriodBanner);
@@ -453,13 +454,15 @@ public partial class MainForm
         ConfigureBranchSalesLinesRegisterColumns(_branchOnlySalesLinesGrid);
         ConfigureBranchIncomingRegisterColumns(_branchOnlyIncomingGrid);
         ConfigureBranchSellersSummaryColumns(_branchOnlySellersGrid);
+        foreach (var g in new[] { _branchOnlySalesLinesGrid, _branchOnlyIncomingGrid, _branchOnlySellersGrid })
+            ApplyReportGridColumnBiDiAlignment(g);
 
         var branchScrollHost = new Panel
         {
             Dock = DockStyle.Fill,
             AutoScroll = true,
             BackColor = Color.FromArgb(245, 247, 250),
-            RightToLeft = RightToLeft.Yes
+            RightToLeft = RightToLeft.No
         };
         var branchLayout = new TableLayoutPanel
         {
@@ -468,7 +471,7 @@ public partial class MainForm
             Dock = DockStyle.Top,
             ColumnCount = 1,
             RowCount = 3,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             Padding = new Padding(14, 10, 14, 16),
             BackColor = Color.Transparent
         };
@@ -477,12 +480,12 @@ public partial class MainForm
         branchLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 340f));
         branchLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 300f));
 
-        void SyncBranchScrollLayout(object? _, EventArgs __)
+        void SyncBranchOnlyScrollLayout(object? _, EventArgs __)
         {
             branchLayout.Width = Math.Max(320, branchScrollHost.DisplayRectangle.Width);
         }
-        branchScrollHost.HandleCreated += SyncBranchScrollLayout;
-        branchScrollHost.Resize += SyncBranchScrollLayout;
+        branchScrollHost.HandleCreated += SyncBranchOnlyScrollLayout;
+        branchScrollHost.Resize += SyncBranchOnlyScrollLayout;
 
         var salesSection = BuildReportModuleGridSection(
             "١ · حصر أسطر البيع — تفصيل كل صنف مع الفاتورة والعميل والبائع",
@@ -609,7 +612,7 @@ public partial class MainForm
             AutoSize = true,
             Font = lblFont,
             ForeColor = UiTextPrimary,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             TextAlign = ContentAlignment.MiddleRight,
             Margin = new Padding(8, 12, 6, 8),
             UseCompatibleTextRendering = false
@@ -620,7 +623,7 @@ public partial class MainForm
             AutoSize = true,
             Font = lblFont,
             ForeColor = UiTextPrimary,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             TextAlign = ContentAlignment.MiddleRight,
             Margin = new Padding(8, 12, 6, 8),
             UseCompatibleTextRendering = false
@@ -631,7 +634,7 @@ public partial class MainForm
             AutoSize = true,
             Font = lblFont,
             ForeColor = UiTextPrimary,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             TextAlign = ContentAlignment.MiddleRight,
             Margin = new Padding(8, 12, 12, 8),
             UseCompatibleTextRendering = false
@@ -646,12 +649,12 @@ public partial class MainForm
         refresh.Margin = new Padding(16, 6, 8, 8);
 
         filterFlow.Controls.Add(refresh);
-        filterFlow.Controls.Add(_reportWarehouseCombo);
         filterFlow.Controls.Add(lblWh);
-        filterFlow.Controls.Add(_reportToPicker);
+        filterFlow.Controls.Add(_reportWarehouseCombo);
         filterFlow.Controls.Add(lblTo);
-        filterFlow.Controls.Add(_reportFromPicker);
+        filterFlow.Controls.Add(_reportToPicker);
         filterFlow.Controls.Add(lblFrom);
+        filterFlow.Controls.Add(_reportFromPicker);
 
         const int reportModuleRowHeight = 54;
         var exportExcelBtn = BuildSizedButton("تصدير Excel — جميع التحليلات", Color.FromArgb(39, 174, 96), 220, reportModuleRowHeight);
@@ -682,7 +685,8 @@ public partial class MainForm
             AutoScroll = false,
             Padding = new Padding(14, 8, 14, 10),
             BackColor = Color.FromArgb(245, 247, 250),
-            RightToLeft = RightToLeft.Yes,
+            // Match filter toolbar: RTL flow on LTR panel so first KPI is on the physical right.
+            RightToLeft = RightToLeft.No,
             FlowDirection = FlowDirection.RightToLeft
         };
         kpiFlow.Controls.Add(BuildAnalyticsKpiCard("صافي المبيعات", _kpiNetSalesVal, Color.FromArgb(39, 174, 96), true));
@@ -703,7 +707,7 @@ public partial class MainForm
             AutoScroll = false,
             Padding = new Padding(14, 6, 14, 8),
             BackColor = Color.FromArgb(245, 247, 250),
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             FlowDirection = FlowDirection.RightToLeft
         };
         overviewDetailFlow.Controls.Add(BuildAnalyticsKpiCard("الإجمالي قبل الخصم", _overviewGrossVal, Color.FromArgb(52, 73, 94), true));
@@ -722,6 +726,12 @@ public partial class MainForm
         ConfigureReportLowStockColumns();
         ConfigureTransferReportColumns(_transferReportGrid);
         ConfigureWarehouseInventorySnapshotColumns();
+        foreach (var g in new[]
+                 {
+                     _salesByWarehouseGrid, _topProductsGrid, _slowMovingGrid, _reportLowStockGrid, _transferReportGrid,
+                     _warehouseInventoryGrid
+                 })
+            ApplyReportGridColumnBiDiAlignment(g);
 
         var branchSection = BuildReportModuleGridSection("١ · مقارنة المبيعات · كل المستودعات", _salesByWarehouseGrid, new Padding(0, 0, 0, 12));
         var topSection = BuildReportModuleGridSection("٢ · الأكثر مبيعاً (المستودع المحدد)", _topProductsGrid, new Padding(0, 0, 0, 12));
@@ -738,7 +748,7 @@ public partial class MainForm
             Dock = DockStyle.Fill,
             AutoScroll = true,
             BackColor = Color.FromArgb(245, 247, 250),
-            RightToLeft = RightToLeft.Yes
+            RightToLeft = RightToLeft.No
         };
         var overviewLayout = new TableLayoutPanel
         {
@@ -747,7 +757,7 @@ public partial class MainForm
             Dock = DockStyle.Top,
             ColumnCount = 1,
             RowCount = 10,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             Padding = new Padding(0, 0, 0, 16),
             BackColor = Color.Transparent
         };
@@ -774,7 +784,7 @@ public partial class MainForm
         overviewScrollHost.HandleCreated += SyncOverviewScrollLayout;
         overviewScrollHost.Resize += SyncOverviewScrollLayout;
 
-        var bannerHost = new Panel { Dock = DockStyle.Fill, Padding = new Padding(14, 6, 14, 4), BackColor = Color.FromArgb(245, 247, 250), RightToLeft = RightToLeft.Yes };
+        var bannerHost = new Panel { Dock = DockStyle.Fill, Padding = new Padding(14, 6, 14, 4), BackColor = Color.FromArgb(245, 247, 250), RightToLeft = RightToLeft.No };
         _reportPeriodBanner.Dock = DockStyle.Fill;
         bannerHost.Controls.Add(_reportPeriodBanner);
 
@@ -794,17 +804,17 @@ public partial class MainForm
 
         overviewScrollHost.Controls.Add(overviewLayout);
 
-        var overviewPanel = new Panel { RightToLeft = RightToLeft.Yes, BackColor = Color.FromArgb(245, 247, 250) };
+        var overviewPanel = new Panel { RightToLeft = RightToLeft.No, BackColor = Color.FromArgb(245, 247, 250) };
         overviewPanel.Controls.Add(overviewScrollHost);
 
         // ── Branch register: sales lines + incoming + seller rollup (same filters as report toolbar) ──
-        var branchRegisterPanel = new Panel { RightToLeft = RightToLeft.Yes, BackColor = Color.FromArgb(245, 247, 250) };
+        var branchRegisterPanel = new Panel { RightToLeft = RightToLeft.No, BackColor = Color.FromArgb(245, 247, 250) };
         var branchScrollHost = new Panel
         {
             Dock = DockStyle.Fill,
             AutoScroll = true,
             BackColor = Color.FromArgb(245, 247, 250),
-            RightToLeft = RightToLeft.Yes
+            RightToLeft = RightToLeft.No
         };
         var branchLayout = new TableLayoutPanel
         {
@@ -813,7 +823,7 @@ public partial class MainForm
             Dock = DockStyle.Top,
             ColumnCount = 1,
             RowCount = 5,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             Padding = new Padding(14, 10, 14, 16),
             BackColor = Color.Transparent
         };
@@ -832,7 +842,7 @@ public partial class MainForm
             Font = UiFontSection,
             ForeColor = UiTextPrimary,
             TextAlign = ContentAlignment.TopRight,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             Margin = new Padding(0, 0, 0, 4),
             UseCompatibleTextRendering = false
         };
@@ -844,7 +854,7 @@ public partial class MainForm
             Font = new Font(UiFont, FontStyle.Regular),
             ForeColor = UiTextSecondary,
             TextAlign = ContentAlignment.TopRight,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             Margin = new Padding(0, 0, 0, 10),
             MaximumSize = new Size(980, 0),
             UseCompatibleTextRendering = false
@@ -866,6 +876,8 @@ public partial class MainForm
         ConfigureBranchSalesLinesRegisterColumns(_branchSalesLinesGrid);
         ConfigureBranchIncomingRegisterColumns(_branchIncomingGrid);
         ConfigureBranchSellersSummaryColumns(_branchSellersGrid);
+        foreach (var g in new[] { _branchSalesLinesGrid, _branchIncomingGrid, _branchSellersGrid })
+            ApplyReportGridColumnBiDiAlignment(g);
 
         var branchSalesSection = BuildReportModuleGridSection(
             "١ · حصر أسطر البيع — تفصيل كل صنف مع الفاتورة والعميل والبائع",
@@ -888,14 +900,14 @@ public partial class MainForm
         branchScrollHost.Controls.Add(branchLayout);
         branchRegisterPanel.Controls.Add(branchScrollHost);
 
-        var profitPanel = new Panel { RightToLeft = RightToLeft.Yes, Padding = new Padding(14, 10, 14, 12), BackColor = Color.FromArgb(245, 247, 250) };
+        var profitPanel = new Panel { RightToLeft = RightToLeft.No, Padding = new Padding(14, 10, 14, 12), BackColor = Color.FromArgb(245, 247, 250) };
         // Scroll the whole profitability column: KPI + filter + both grids need more vertical space than the tab often has.
         var profitScrollHost = new Panel
         {
             Dock = DockStyle.Fill,
             AutoScroll = true,
             BackColor = Color.FromArgb(245, 247, 250),
-            RightToLeft = RightToLeft.Yes
+            RightToLeft = RightToLeft.No
         };
         var profitLayout = new TableLayoutPanel
         {
@@ -904,7 +916,7 @@ public partial class MainForm
             Dock = DockStyle.Top,
             ColumnCount = 1,
             RowCount = 5,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             BackColor = Color.Transparent
         };
         profitLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
@@ -932,7 +944,7 @@ public partial class MainForm
             Font = UiFontSection,
             ForeColor = UiTextPrimary,
             TextAlign = ContentAlignment.TopRight,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             Margin = new Padding(0, 0, 0, 4),
             UseCompatibleTextRendering = false
         };
@@ -945,7 +957,7 @@ public partial class MainForm
             Font = new Font(UiFont, FontStyle.Regular),
             ForeColor = UiTextSecondary,
             TextAlign = ContentAlignment.TopRight,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             Margin = new Padding(0, 0, 0, 10),
             UseCompatibleTextRendering = false
         };
@@ -958,7 +970,7 @@ public partial class MainForm
             AutoScroll = false,
             Padding = new Padding(4, 4, 4, 6),
             BackColor = Color.FromArgb(245, 247, 250),
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             FlowDirection = FlowDirection.RightToLeft
         };
         profitKpiFlow.Controls.Add(BuildAnalyticsKpiCard("إجمالي الإيراد", _profitKpiRevenueVal, Color.FromArgb(41, 128, 185), true));
@@ -975,7 +987,7 @@ public partial class MainForm
             Padding = new Padding(14, 12, 14, 12),
             Margin = new Padding(0, 0, 0, 12),
             BorderStyle = BorderStyle.FixedSingle,
-            RightToLeft = RightToLeft.Yes
+            RightToLeft = RightToLeft.No
         };
         _profitAllBranchesCheck.Font = UiFont;
         _profitAllBranchesCheck.Margin = new Padding(0, 2, 0, 0);
@@ -987,7 +999,7 @@ public partial class MainForm
             Font = new Font(UiFont, FontStyle.Italic),
             ForeColor = UiTextSecondary,
             TextAlign = ContentAlignment.MiddleRight,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             Margin = new Padding(16, 4, 0, 0),
             MaximumSize = new Size(720, 0),
             UseCompatibleTextRendering = false
@@ -1000,7 +1012,7 @@ public partial class MainForm
             AutoSize = true,
             Padding = Padding.Empty,
             BackColor = Color.White,
-            RightToLeft = RightToLeft.Yes
+            RightToLeft = RightToLeft.No
         };
         profitFilterInner.Controls.Add(profitFilterHint);
         profitFilterInner.Controls.Add(_profitAllBranchesCheck);
@@ -1010,6 +1022,8 @@ public partial class MainForm
         ApplyProfitModuleGridChrome(_profitByProductGrid);
         ConfigureProfitByInvoiceColumns();
         ConfigureProfitByProductColumns();
+        ApplyReportGridColumnBiDiAlignment(_profitByInvoiceGrid);
+        ApplyReportGridColumnBiDiAlignment(_profitByProductGrid);
 
         var invoiceSection = BuildReportModuleGridSection("١ · حسب الفاتورة", _profitByInvoiceGrid, new Padding(0, 0, 0, 14));
         var productSection = BuildReportModuleGridSection("٢ · تجميع حسب الصنف", _profitByProductGrid, Padding.Empty);
@@ -1022,7 +1036,7 @@ public partial class MainForm
             Dock = DockStyle.Top,
             ColumnCount = 1,
             RowCount = 2,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             BackColor = Color.Transparent
         };
         profitGridsStack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
@@ -1039,13 +1053,13 @@ public partial class MainForm
         profitScrollHost.Controls.Add(profitLayout);
         profitPanel.Controls.Add(profitScrollHost);
 
-        var stockPanel = new Panel { RightToLeft = RightToLeft.Yes, BackColor = Color.FromArgb(245, 247, 250) };
+        var stockPanel = new Panel { RightToLeft = RightToLeft.No, BackColor = Color.FromArgb(245, 247, 250) };
         var stockScrollHost = new Panel
         {
             Dock = DockStyle.Fill,
             AutoScroll = true,
             BackColor = Color.FromArgb(245, 247, 250),
-            RightToLeft = RightToLeft.Yes
+            RightToLeft = RightToLeft.No
         };
         var stockLayout = new TableLayoutPanel
         {
@@ -1054,7 +1068,7 @@ public partial class MainForm
             Dock = DockStyle.Top,
             ColumnCount = 1,
             RowCount = 5,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             Padding = new Padding(14, 10, 14, 16),
             BackColor = Color.Transparent
         };
@@ -1073,7 +1087,7 @@ public partial class MainForm
             Font = UiFontSection,
             ForeColor = UiTextPrimary,
             TextAlign = ContentAlignment.TopRight,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             Margin = new Padding(0, 0, 0, 4),
             UseCompatibleTextRendering = false
         };
@@ -1085,7 +1099,7 @@ public partial class MainForm
             Font = new Font(UiFont, FontStyle.Regular),
             ForeColor = UiTextSecondary,
             TextAlign = ContentAlignment.TopRight,
-            RightToLeft = RightToLeft.Yes,
+            RightToLeft = RightToLeft.No,
             Margin = new Padding(0, 0, 0, 10),
             MaximumSize = new Size(980, 0),
             UseCompatibleTextRendering = false
@@ -1101,10 +1115,21 @@ public partial class MainForm
             Padding = new Padding(14, 12, 14, 12),
             Margin = new Padding(0, 0, 0, 12),
             BorderStyle = BorderStyle.FixedSingle,
-            RightToLeft = RightToLeft.Yes
+            RightToLeft = RightToLeft.No
         };
         _reportHistoryProductCombo.RightToLeft = RightToLeft.Yes;
         _reportHistoryProductCombo.Width = 320;
+        var stockFilterLbl = new Label
+        {
+            Text = "الصنف لعرض الحركة في الجدول الثاني:",
+            AutoSize = true,
+            Margin = new Padding(12, 8, 0, 0),
+            TextAlign = ContentAlignment.MiddleRight,
+            Font = UiFontCaption,
+            ForeColor = UiTextPrimary,
+            RightToLeft = RightToLeft.No,
+            UseCompatibleTextRendering = false
+        };
         var stockFilterInner = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -1113,26 +1138,18 @@ public partial class MainForm
             AutoSize = true,
             Padding = Padding.Empty,
             BackColor = Color.White,
-            RightToLeft = RightToLeft.Yes
+            RightToLeft = RightToLeft.No
         };
+        stockFilterInner.Controls.Add(stockFilterLbl);
         stockFilterInner.Controls.Add(_reportHistoryProductCombo);
-        stockFilterInner.Controls.Add(new Label
-        {
-            Text = "الصنف لعرض الحركة في الجدول الثاني:",
-            AutoSize = true,
-            Margin = new Padding(12, 8, 0, 0),
-            TextAlign = ContentAlignment.MiddleRight,
-            Font = UiFontCaption,
-            ForeColor = UiTextPrimary,
-            RightToLeft = RightToLeft.Yes,
-            UseCompatibleTextRendering = false
-        });
         stockFilterBar.Controls.Add(stockFilterInner);
 
         ApplyProfitModuleGridChrome(_stockFromMovementsGrid);
         ApplyProfitModuleGridChrome(_stockHistoryGrid);
         ConfigureStockFromMovementsColumns();
         ConfigureStockHistoryColumns();
+        ApplyReportGridColumnBiDiAlignment(_stockFromMovementsGrid);
+        ApplyReportGridColumnBiDiAlignment(_stockHistoryGrid);
 
         var stockMovementsSection = BuildReportModuleGridSection(
             "١ · أرصدة الأصناف من حركات المخزون (حسب المستودع المحدد أعلى التقرير)",
@@ -1162,37 +1179,45 @@ public partial class MainForm
         stockScrollHost.Controls.Add(stockLayout);
         stockPanel.Controls.Add(stockScrollHost);
 
-        var xferPanel = new Panel { RightToLeft = RightToLeft.Yes };
+        var xferPanel = new Panel { RightToLeft = RightToLeft.No };
         StyleReportGrid(_transferFullGrid);
         ConfigureTransferReportColumns(_transferFullGrid);
+        ApplyReportGridColumnBiDiAlignment(_transferFullGrid);
         _transferFullGrid.Dock = DockStyle.Fill;
         xferPanel.Controls.Add(_transferFullGrid);
 
-        var cashPanel = new Panel { RightToLeft = RightToLeft.Yes };
-        var cashHost = new Panel { Dock = DockStyle.Fill, RightToLeft = RightToLeft.Yes };
+        var cashPanel = new Panel { RightToLeft = RightToLeft.No };
+        var cashHost = new Panel { Dock = DockStyle.Fill, RightToLeft = RightToLeft.No };
         StyleReportGrid(_cashFlowGrid);
         StyleReportGrid(_expenseReportGrid);
         ConfigureCashFlowColumns();
         ConfigureExpenseReportColumns();
+        ApplyReportGridColumnBiDiAlignment(_cashFlowGrid);
+        ApplyReportGridColumnBiDiAlignment(_expenseReportGrid);
         var expenseBar = new FlowLayoutPanel
         {
             Dock = DockStyle.Bottom,
             Height = 44,
             FlowDirection = FlowDirection.RightToLeft,
+            RightToLeft = RightToLeft.No,
             Padding = new Padding(8, 4, 8, 4),
             WrapContents = false
         };
-        expenseBar.Controls.Add(_expenseSaveButton);
-        expenseBar.Controls.Add(_expenseDateInput);
-        expenseBar.Controls.Add(new Label { Text = "التاريخ", AutoSize = true, Margin = new Padding(0, 8, 0, 0), RightToLeft = RightToLeft.Yes });
+        var lblExpenseDate = new Label { Text = "التاريخ", AutoSize = true, Margin = new Padding(0, 8, 0, 0), RightToLeft = RightToLeft.Yes };
+        var lblExpenseDesc = new Label { Text = "الوصف", AutoSize = true, Margin = new Padding(0, 8, 0, 0), RightToLeft = RightToLeft.Yes };
+        var lblExpenseCat = new Label { Text = "البند", AutoSize = true, Margin = new Padding(0, 8, 0, 0), RightToLeft = RightToLeft.Yes };
+        var lblExpenseAmt = new Label { Text = "المبلغ", AutoSize = true, Margin = new Padding(0, 8, 0, 0), RightToLeft = RightToLeft.Yes };
         _expenseDescriptionInput.RightToLeft = RightToLeft.Yes;
-        expenseBar.Controls.Add(_expenseDescriptionInput);
-        expenseBar.Controls.Add(new Label { Text = "الوصف", AutoSize = true, Margin = new Padding(0, 8, 0, 0), RightToLeft = RightToLeft.Yes });
         _expenseCategoryInput.RightToLeft = RightToLeft.Yes;
+        expenseBar.Controls.Add(_expenseSaveButton);
+        expenseBar.Controls.Add(lblExpenseDate);
+        expenseBar.Controls.Add(_expenseDateInput);
+        expenseBar.Controls.Add(lblExpenseDesc);
+        expenseBar.Controls.Add(_expenseDescriptionInput);
+        expenseBar.Controls.Add(lblExpenseCat);
         expenseBar.Controls.Add(_expenseCategoryInput);
-        expenseBar.Controls.Add(new Label { Text = "البند", AutoSize = true, Margin = new Padding(0, 8, 0, 0), RightToLeft = RightToLeft.Yes });
+        expenseBar.Controls.Add(lblExpenseAmt);
         expenseBar.Controls.Add(_expenseAmountInput);
-        expenseBar.Controls.Add(new Label { Text = "المبلغ", AutoSize = true, Margin = new Padding(0, 8, 0, 0), RightToLeft = RightToLeft.Yes });
         var cashSplit = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, RightToLeft = RightToLeft.Yes };
         ApplyInitialSplitterDistance(cashSplit, 320);
         cashSplit.Panel1.Controls.Add(_cashFlowGrid);
@@ -1204,8 +1229,8 @@ public partial class MainForm
 
         _reportHistoryProductCombo.SelectedIndexChanged += async (_, _) => await RefreshReportStockHistoryOnlyAsync();
 
-        var reportViewsHost = new Panel { Dock = DockStyle.Fill, Padding = Padding.Empty };
-        var reportModuleRoot = new Panel { Dock = DockStyle.Fill, RightToLeft = RightToLeft.Yes };
+        var reportViewsHost = new Panel { Dock = DockStyle.Fill, Padding = Padding.Empty, RightToLeft = RightToLeft.No };
+        var reportModuleRoot = new Panel { Dock = DockStyle.Fill, RightToLeft = RightToLeft.No };
         reportModuleRoot.Controls.Add(reportViewsHost);
 
         var reportPanels = new[] { overviewPanel, branchRegisterPanel, profitPanel, stockPanel, xferPanel, cashPanel };
@@ -1253,6 +1278,19 @@ public partial class MainForm
         tab.Controls.Add(reportModuleRoot);
         tab.Controls.Add(reportsChrome);
         return tab;
+    }
+
+    /// <summary>
+    /// With <see cref="DataGridView.RightToLeft"/> Yes, use <see cref="DataGridViewContentAlignment.MiddleLeft"/>
+    /// on headers and cells so text appears on the physical right (mirrored alignment).
+    /// </summary>
+    private static void ApplyReportGridColumnBiDiAlignment(DataGridView grid)
+    {
+        foreach (DataGridViewColumn col in grid.Columns)
+        {
+            col.HeaderCell.Style.Alignment = DataGridViewContentAlignment.MiddleLeft;
+            col.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
+        }
     }
 
     private void ConfigureSalesByWarehouseReportColumns()
@@ -1314,6 +1352,8 @@ public partial class MainForm
     /// <summary>Report block: title bar + grid (stable layout; avoids title/header overlap).</summary>
     private TableLayoutPanel BuildReportModuleGridSection(string sectionTitle, DataGridView grid, Padding outerMargin)
     {
+        // LTR shell: RTL on this panel mirrors TextAlign, so "MiddleRight" titles drew on the visual left.
+        // Grids keep their own RightToLeft.Yes from StyleReportGrid.
         var wrap = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -1323,7 +1363,7 @@ public partial class MainForm
             Margin = outerMargin,
             BackColor = Color.White,
             BorderStyle = BorderStyle.FixedSingle,
-            RightToLeft = RightToLeft.Yes
+            RightToLeft = RightToLeft.No
         };
         wrap.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
         wrap.RowStyles.Add(new RowStyle(SizeType.Absolute, 48f));
@@ -1333,15 +1373,18 @@ public partial class MainForm
         {
             Dock = DockStyle.Fill,
             BackColor = Color.FromArgb(244, 246, 250),
-            Padding = new Padding(12, 6, 12, 6)
+            Padding = new Padding(12, 6, 12, 6),
+            RightToLeft = RightToLeft.No
         };
+        // RTL on the label so "١ · عنوان…" keeps the index on the reading edge (physical right).
+        // MiddleLeft here mirrors under RTL.Yes and matches a visually right-aligned title bar.
         titleBar.Controls.Add(new Label
         {
             Text = sectionTitle,
             Dock = DockStyle.Fill,
             Font = UiFontSection,
             ForeColor = UiTextPrimary,
-            TextAlign = ContentAlignment.MiddleRight,
+            TextAlign = ContentAlignment.MiddleLeft,
             RightToLeft = RightToLeft.Yes,
             AutoSize = false,
             UseCompatibleTextRendering = false
@@ -1515,7 +1558,7 @@ public partial class MainForm
     private void ApplyReportsVisualStyle()
     {
         _reportPeriodBanner.Font = UiFontSection;
-        _reportPeriodBanner.RightToLeft = RightToLeft.Yes;
+        _reportPeriodBanner.RightToLeft = RightToLeft.No;
         foreach (var l in new[]
                  {
                      _kpiNetSalesVal, _kpiInvoicesVal, _kpiAvgTicketVal, _kpiEstProfitVal, _kpiStockValueVal, _kpiLowStockVal,
