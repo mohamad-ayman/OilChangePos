@@ -226,6 +226,9 @@ public class AppUser
     public string PasswordHash { get; set; } = string.Empty;
     public UserRole Role { get; set; } = UserRole.Branch;
     public bool IsActive { get; set; } = true;
+    /// <summary>When <see cref="Role"/> is <see cref="UserRole.Branch"/>, POS/inventory default to this active branch warehouse; if null, first branch by name is used.</summary>
+    public int? HomeBranchWarehouseId { get; set; }
+    public Warehouse? HomeBranchWarehouse { get; set; }
 }
 
 /// <summary>Manual operating expenses (rent, utilities, etc.) for cash-flow reporting — not COGS.</summary>

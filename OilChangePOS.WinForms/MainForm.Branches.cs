@@ -26,7 +26,7 @@ public partial class MainForm
 
         var headerCard = BuildStandardModuleHeaderCard(
             "إدارة الفروع (مرجع)",
-            "إضافة وتعديل وتعطيل فروع البيع فقط. المستودع الرئيسي يُدار تلقائياً ولا يُعرض هنا.",
+            "إضافة وتعديل وتعطيل فروع البيع فقط. المستودع الرئيسي يُدار تلقائياً ولا يُعرض هنا. من أسفل: ربط كل مستخدم بدور «فرع» بفرعه الافتراضي للمخزون ونقطة البيع (إلا يُختار أول فرع نشط بالترتيب الأبجدي للاسم).",
             subtitleItalic: false,
             DockStyle.Fill,
             autoSizeHeight: false,
@@ -61,6 +61,40 @@ public partial class MainForm
 
         formFlow.Controls.Add(nameRow);
         formFlow.Controls.Add(_branchActive);
+
+        var branchLoginHint = new Label
+        {
+            Text = "مستخدمو الفرع: اختر المستخدم ثم فرع الدخول الافتراضي (أو «تلقائي» لأول فرع بالاسم). يُطبَّق بعد إعادة تسجيل الدخول.",
+            AutoSize = true,
+            MaximumSize = new Size(540, 0),
+            Font = UiFont,
+            ForeColor = UiTextSecondary,
+            Padding = new Padding(0, 10, 0, 4),
+            RightToLeft = RightToLeft.Yes
+        };
+        formFlow.Controls.Add(branchLoginHint);
+        var branchLoginRow = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            WrapContents = true,
+            Padding = new Padding(0, 0, 0, 4)
+        };
+        var saveBranchLogin = BuildButton("حفظ ارتباط الدخول", Color.FromArgb(52, 73, 94));
+        saveBranchLogin.Click += async (_, _) => await SaveBranchUserHomeWarehouseAsync();
+        branchLoginRow.Controls.Add(saveBranchLogin);
+        branchLoginRow.Controls.Add(_branchLoginWarehouseCombo);
+        branchLoginRow.Controls.Add(new Label { Text = "فرع الدخول", AutoSize = true, Padding = new Padding(10, 10, 0, 0), Font = UiFontCaption, ForeColor = UiTextPrimary, RightToLeft = RightToLeft.Yes });
+        branchLoginRow.Controls.Add(_branchLoginUserCombo);
+        branchLoginRow.Controls.Add(new Label { Text = "مستخدم الفرع", AutoSize = true, Padding = new Padding(10, 10, 0, 0), Font = UiFontCaption, ForeColor = UiTextPrimary, RightToLeft = RightToLeft.Yes });
+        formFlow.Controls.Add(branchLoginRow);
+
+        if (!_branchLoginEventsAttached)
+        {
+            _branchLoginEventsAttached = true;
+            _branchLoginUserCombo.SelectedIndexChanged += (_, _) => SyncBranchLoginWarehouseFromSelectedUser();
+        }
+
         var addBranch = BuildButton("إضافة فرع", Color.FromArgb(39, 174, 96));
         addBranch.Click += async (_, _) => await SaveBranchAsync(createNew: true);
         var saveBranch = BuildButton("حفظ التعديل", Color.FromArgb(243, 156, 18));
@@ -160,6 +194,100 @@ public partial class MainForm
             ClearBranchForm();
         else
             LoadSelectedBranchRow();
+
+        await RefreshBranchLoginBindingAsync();
+    }
+
+    private async Task RefreshBranchLoginBindingAsync()
+    {
+        if (_currentUser.Role != UserRole.Admin)
+            return;
+
+        var users = await _authService.ListBranchRoleUsersAsync(_currentUser.Id);
+        var branches = await _warehouseService.GetBranchesAsync();
+        var whList = new List<WarehouseDto> { new(0, "— تلقائي (أول فرع بالاسم) —", WarehouseType.Branch, true) };
+        whList.AddRange(branches);
+
+        _suppressBranchLoginWarehouseSync = true;
+        try
+        {
+            _branchLoginWarehouseCombo.DataSource = null;
+            _branchLoginWarehouseCombo.DisplayMember = nameof(WarehouseDto.Name);
+            _branchLoginWarehouseCombo.ValueMember = nameof(WarehouseDto.Id);
+            _branchLoginWarehouseCombo.DataSource = whList;
+
+            _branchLoginUserCombo.DataSource = null;
+            _branchLoginUserCombo.DisplayMember = nameof(BranchRoleUserDto.Username);
+            _branchLoginUserCombo.ValueMember = nameof(BranchRoleUserDto.Id);
+            _branchLoginUserCombo.DataSource = users.ToList();
+            if (users.Count > 0)
+                _branchLoginUserCombo.SelectedIndex = 0;
+        }
+        finally
+        {
+            _suppressBranchLoginWarehouseSync = false;
+        }
+
+        SyncBranchLoginWarehouseFromSelectedUser();
+    }
+
+    private void SyncBranchLoginWarehouseFromSelectedUser()
+    {
+        if (_suppressBranchLoginWarehouseSync)
+            return;
+        if (_branchLoginUserCombo.SelectedItem is not BranchRoleUserDto u)
+            return;
+
+        _suppressBranchLoginWarehouseSync = true;
+        try
+        {
+            if (u.HomeBranchWarehouseId is not { } hid || hid <= 0)
+            {
+                _branchLoginWarehouseCombo.SelectedValue = 0;
+                return;
+            }
+
+            for (var i = 0; i < _branchLoginWarehouseCombo.Items.Count; i++)
+            {
+                if (_branchLoginWarehouseCombo.Items[i] is WarehouseDto w && w.Id == hid)
+                {
+                    _branchLoginWarehouseCombo.SelectedIndex = i;
+                    return;
+                }
+            }
+
+            _branchLoginWarehouseCombo.SelectedValue = 0;
+        }
+        finally
+        {
+            _suppressBranchLoginWarehouseSync = false;
+        }
+    }
+
+    private async Task SaveBranchUserHomeWarehouseAsync()
+    {
+        if (_currentUser.Role != UserRole.Admin)
+            return;
+        if (_branchLoginUserCombo.SelectedItem is not BranchRoleUserDto u)
+        {
+            MessageBox.Show("لا يوجد مستخدم بدور فرع.", "الفروع", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, MsgRtl);
+            return;
+        }
+
+        int? home = null;
+        if (_branchLoginWarehouseCombo.SelectedItem is WarehouseDto wh && wh.Id > 0)
+            home = wh.Id;
+
+        try
+        {
+            await _authService.SetUserHomeBranchWarehouseAsync(_currentUser.Id, u.Id, home);
+            MessageBox.Show("تم حفظ ارتباط فرع الدخول. اطلب من المستخدم تسجيل الخروج ثم الدخول مجدداً.", "الفروع", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, MsgRtl);
+            await RefreshBranchLoginBindingAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "الفروع", MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, MsgRtl);
+        }
     }
 
     private void LoadSelectedBranchRow()

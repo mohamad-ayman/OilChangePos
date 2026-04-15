@@ -97,6 +97,7 @@ internal static class Program
                 sp.GetRequiredService<ITransferService>(),
                 sp.GetRequiredService<IWarehouseService>(),
                 sp.GetRequiredService<ICustomerService>(),
+                sp.GetRequiredService<IAuthService>(),
                 sessionUser!);
 
             Application.Run(main);

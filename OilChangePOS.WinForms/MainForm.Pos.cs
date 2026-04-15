@@ -761,7 +761,8 @@ public partial class MainForm
             return (true, id);
 
         var branches = await _warehouseService.GetBranchesAsync();
-        if (branches.FirstOrDefault() is { } b)
+        var preferred = ResolvePreferredBranchForCurrentUser(branches);
+        if (preferred is { } b)
         {
             SyncWarehouseComboToWarehouseId(_posWarehouseCombo, b.Id);
             if (TryGetWarehouseIdFromCombo(_posWarehouseCombo, out id))

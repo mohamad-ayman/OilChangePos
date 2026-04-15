@@ -206,7 +206,6 @@ public partial class MainForm
 
         ApplyModernWarehouseNumeric(_mwQuantity);
         ApplyModernWarehouseNumeric(_mwPurchasePrice);
-        ApplyModernWarehouseNumeric(_mwRetailPrice);
         ApplyModernWarehouseDatePicker(_mwProductionDate);
         ApplyModernWarehouseDatePicker(_mwPurchaseDate);
 
@@ -216,7 +215,6 @@ public partial class MainForm
         _mwProductLookup.SelectedIndexChanged += async (_, _) =>
         {
             if (_syncingMainWarehouseProductCombo) return;
-            SyncMainWarehouseRetailFromSelectedCatalog();
             await RefreshMainWarehouseAvailableStockHintAsync();
             await SyncMainWarehouseBranchPricePanelAsync();
             SyncMainWarehouseCommandStates();
@@ -227,8 +225,6 @@ public partial class MainForm
         _mwQuantity.ValueChanged += MainWarehouseAddInputsChanged;
         _mwPurchasePrice.TextChanged += MainWarehouseAddInputsChanged;
         _mwPurchasePrice.ValueChanged += MainWarehouseAddInputsChanged;
-        _mwRetailPrice.TextChanged += MainWarehouseAddInputsChanged;
-        _mwRetailPrice.ValueChanged += MainWarehouseAddInputsChanged;
         _mwProductionDate.ValueChanged += MainWarehouseAddInputsChanged;
         _mwPurchaseDate.ValueChanged += MainWarehouseAddInputsChanged;
 
@@ -268,13 +264,13 @@ public partial class MainForm
         _mwProductLookup.Font = MwFontInput;
         _mwProductLookup.ItemHeight = 20;
         _mwProductLookup.TabIndex = 0;
-        // One RTL row: distribute all six controls across the full width (no large unused area).
+        // One RTL row: صنف، كمية، تكلفة الشراء، إنتاج الدفعة، تاريخ الشراء (بدون سعر بيع — يُضبط عند التحويل/الفرع).
         const int mwFieldGap = 6;
         var gap = new Padding(0, 0, mwFieldGap, 0);
         var purchaseFieldsRow = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            ColumnCount = 6,
+            ColumnCount = 5,
             RowCount = 2,
             Padding = new Padding(0, 0, 0, 0),
             Margin = Padding.Empty,
@@ -283,12 +279,11 @@ public partial class MainForm
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             RightToLeft = RightToLeft.Yes
         };
-        purchaseFieldsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30f)); // الصنف
-        purchaseFieldsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10f)); // الكمية
-        purchaseFieldsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10f)); // سعر الشراء
-        purchaseFieldsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10f)); // سعر البيع
-        purchaseFieldsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20f)); // إنتاج الدفعة
-        purchaseFieldsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20f)); // تاريخ الشراء
+        purchaseFieldsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34f)); // الصنف
+        purchaseFieldsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12f)); // الكمية
+        purchaseFieldsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 14f)); // سعر الشراء
+        purchaseFieldsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22f)); // إنتاج الدفعة
+        purchaseFieldsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 18f)); // تاريخ الشراء
         purchaseFieldsRow.RowStyles.Add(new RowStyle(SizeType.Absolute, 18f)); // labels
         purchaseFieldsRow.RowStyles.Add(new RowStyle(SizeType.Absolute, 26f)); // controls
         Label BuildTopLabel(string text)
@@ -317,19 +312,15 @@ public partial class MainForm
         _mwPurchasePrice.TabIndex = 2;
         _mwQuantity.Margin = gap;
         _mwPurchasePrice.Margin = gap;
-        _mwRetailPrice.Margin = Padding.Empty;
-        _mwRetailPrice.Margin = gap;
-        _mwRetailPrice.TabIndex = 3;
         _mwProductionDate.Margin = Padding.Empty;
         _mwPurchaseDate.Margin = Padding.Empty;
         _mwProductionDate.Margin = gap;
-        _mwProductionDate.TabIndex = 4;
-        _mwPurchaseDate.TabIndex = 5;
+        _mwProductionDate.TabIndex = 3;
+        _mwPurchaseDate.TabIndex = 4;
         _mwPurchaseDate.Margin = Padding.Empty;
         _mwProductLookup.Dock = DockStyle.Fill;
         _mwQuantity.Dock = DockStyle.Fill;
         _mwPurchasePrice.Dock = DockStyle.Fill;
-        _mwRetailPrice.Dock = DockStyle.Fill;
         _mwProductionDate.Dock = DockStyle.Fill;
         _mwPurchaseDate.Dock = DockStyle.Fill;
         // Apply height caps after field layout is set.
@@ -338,25 +329,21 @@ public partial class MainForm
         _mwProductLookup.DropDownWidth = 420;
         _mwQuantity.MaximumSize = new Size(0, mwCtlH);
         _mwPurchasePrice.MaximumSize = new Size(0, mwCtlH);
-        _mwRetailPrice.MaximumSize = new Size(0, mwCtlH);
         _mwProductionDate.MaximumSize = new Size(0, mwCtlH);
         _mwPurchaseDate.MaximumSize = new Size(0, mwCtlH);
         _mainWarehouseToolTip.SetToolTip(_mwQuantity, "كمية الشراء لهذه الدفعة.");
-        _mainWarehouseToolTip.SetToolTip(_mwRetailPrice, "سعر البيع المرجعي في نقطة البيع / الصرف لهذا الصنف.");
         _mainWarehouseToolTip.SetToolTip(_mwProductionDate, "تاريخ إنتاج الدفعة كما يُسجَّل في المستودع الرئيسي.");
         _mainWarehouseToolTip.SetToolTip(_mwPurchaseDate, "تاريخ تسجيل عملية الشراء لهذه الدفعة.");
         purchaseFieldsRow.Controls.Add(BuildTopLabel("الصنف (من الكتالوج)"), 0, 0);
         purchaseFieldsRow.Controls.Add(BuildTopLabel("الكمية"), 1, 0);
         purchaseFieldsRow.Controls.Add(BuildTopLabel("سعر الشراء"), 2, 0);
-        purchaseFieldsRow.Controls.Add(BuildTopLabel("سعر البيع"), 3, 0);
-        purchaseFieldsRow.Controls.Add(BuildTopLabel("إنتاج الدفعة"), 4, 0);
-        purchaseFieldsRow.Controls.Add(BuildTopLabel("تاريخ الشراء"), 5, 0);
+        purchaseFieldsRow.Controls.Add(BuildTopLabel("إنتاج الدفعة"), 3, 0);
+        purchaseFieldsRow.Controls.Add(BuildTopLabel("تاريخ الشراء"), 4, 0);
         purchaseFieldsRow.Controls.Add(_mwProductLookup, 0, 1);
         purchaseFieldsRow.Controls.Add(_mwQuantity, 1, 1);
         purchaseFieldsRow.Controls.Add(_mwPurchasePrice, 2, 1);
-        purchaseFieldsRow.Controls.Add(_mwRetailPrice, 3, 1);
-        purchaseFieldsRow.Controls.Add(_mwProductionDate, 4, 1);
-        purchaseFieldsRow.Controls.Add(_mwPurchaseDate, 5, 1);
+        purchaseFieldsRow.Controls.Add(_mwProductionDate, 3, 1);
+        purchaseFieldsRow.Controls.Add(_mwPurchaseDate, 4, 1);
 
         var formRowDivider = new Panel
         {
@@ -486,7 +473,7 @@ public partial class MainForm
             Tag = MainWarehouseUiLabelTag
         };
         _mainWarehouseToolTip.SetToolTip(branchToggle,
-            "يتجاوز سعر البيع المرجعي للصنف في نقطة بيع الفرع المختار. «إعادة» تلغي التخصيص وتعود للسعر المرجعي.");
+            "يتجاوز سعر القائمة للصنف في نقطة بيع الفرع المختار. «إعادة» تلغي التخصيص وتعود لسعر القائمة.");
         var branchInner = new Panel
         {
             Dock = DockStyle.Top,
@@ -562,14 +549,13 @@ public partial class MainForm
         opsBar.Controls.Add(_mwCmdClear, 3, 0);
         opsBar.Height = mwBtnH + 8;
         _mainWarehouseToolTip.SetToolTip(_mwCmdAdd, "تسجيل كمية شراء جديدة للصنف المختار (دفعة جديدة في المستودع الرئيسي).");
-        _mainWarehouseToolTip.SetToolTip(_mwCmdUpdate, "تحديث الكمية أو السعر أو التواريخ لسطر الشراء المحدد في الجدول.");
+        _mainWarehouseToolTip.SetToolTip(_mwCmdUpdate, "تحديث الكمية أو تكلفة الشراء أو التواريخ لسطر الشراء المحدد في الجدول.");
         _mainWarehouseToolTip.SetToolTip(_mwCmdDelete, "حذف سجل الشراء المحدد في الجدول.");
         _mainWarehouseToolTip.SetToolTip(_mwCmdClear, "إفراغ الحقول دون حفظ. لا يغيّر بيانات الجدول.");
         _mainWarehouseToolTip.SetToolTip(_mwProductLookup, "اختر الصنف من الكتالوج؛ يظهر الاسم والشركة والنوع والعبوة في سطر واحد.");
         _mainWarehouseToolTip.SetToolTip(_mwPurchasePrice, "سعر الشراء (تكلفة الوحدة) لهذه الدفعة.");
-        _mainWarehouseToolTip.SetToolTip(_mwRetailPrice, "سعر البيع المرجعي في نقطة البيع / الصرف لهذا الصنف.");
-        _mainWarehouseToolTip.SetToolTip(_mwBranchPriceSaveBtn, "حفظ سعر البيع لهذا الصنف في الفرع المختار (يتجاوز السعر المرجعي في نقطة البيع).");
-        _mainWarehouseToolTip.SetToolTip(_mwBranchPriceResetBtn, "إزالة تخصيص الفرع والعودة لسعر البيع المرجعي للصنف.");
+        _mainWarehouseToolTip.SetToolTip(_mwBranchPriceSaveBtn, "حفظ سعر البيع لهذا الصنف في الفرع المختار (يتجاوز سعر القائمة للصنف في نقطة بيع الفرع).");
+        _mainWarehouseToolTip.SetToolTip(_mwBranchPriceResetBtn, "إزالة تخصيص الفرع والعودة لسعر القائمة للصنف.");
 
         formShell.Controls.Add(purchaseHeader, 0, 0);
         formShell.Controls.Add(purchaseFieldsRow, 0, 1);
@@ -704,7 +690,6 @@ public partial class MainForm
 
         AttachWarehouseInputFocusCue(_mwQuantity);
         AttachWarehouseInputFocusCue(_mwPurchasePrice);
-        AttachWarehouseInputFocusCue(_mwRetailPrice);
         AttachWarehouseInputFocusCue(_mwProductionDate);
         AttachWarehouseInputFocusCue(_mwPurchaseDate);
         AttachWarehouseInputFocusCue(_mwProductLookup);
@@ -764,13 +749,12 @@ public partial class MainForm
     }
 
     private bool CanCommitMainWarehouseAdd() =>
-        TryGetMainWarehouseAddInputs(out _, out _, out _, out _, out _, out _, out _);
+        TryGetMainWarehouseAddInputs(out _, out _, out _, out _, out _, out _);
 
     private bool TryGetMainWarehouseAddInputs(
         out MainWarehouseCatalogRow? catalog,
         out decimal quantity,
         out decimal purchasePrice,
-        out decimal retailUnitPrice,
         out DateTime productionDate,
         out DateTime purchaseDate,
         out string? errorMessage)
@@ -778,7 +762,6 @@ public partial class MainForm
         catalog = null;
         quantity = 0;
         purchasePrice = 0;
-        retailUnitPrice = 0;
         productionDate = default;
         purchaseDate = default;
         errorMessage = null;
@@ -792,7 +775,6 @@ public partial class MainForm
         catalog = c;
         quantity = ReadCommittedNumericUpDown(_mwQuantity);
         purchasePrice = ReadCommittedNumericUpDown(_mwPurchasePrice);
-        retailUnitPrice = ReadCommittedNumericUpDown(_mwRetailPrice);
         productionDate = _mwProductionDate.Value.Date;
         purchaseDate = _mwPurchaseDate.Value.Date;
 
@@ -808,20 +790,7 @@ public partial class MainForm
             return false;
         }
 
-        if (retailUnitPrice < 0)
-        {
-            errorMessage = "سعر البيع لا يمكن أن يكون سالباً.";
-            return false;
-        }
-
         return true;
-    }
-
-    private void SyncMainWarehouseRetailFromSelectedCatalog()
-    {
-        if (_suppressMainWarehouseRowLoad) return;
-        if (_mwProductLookup.SelectedItem is MainWarehouseCatalogRow row)
-            _mwRetailPrice.Value = Math.Clamp(row.RetailUnitPrice, _mwRetailPrice.Minimum, _mwRetailPrice.Maximum);
     }
 
     private int GetMainWarehousePageSize()
@@ -979,15 +948,6 @@ public partial class MainForm
         });
         _mainWarehouseGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
-            DataPropertyName = nameof(MainWarehouseRow.RetailUnitPrice),
-            HeaderText = "سعر البيع (نقطة البيع)",
-            FillWeight = 11,
-            MinimumWidth = 100,
-            ReadOnly = true,
-            DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight }
-        });
-        _mainWarehouseGrid.Columns.Add(new DataGridViewTextBoxColumn
-        {
             DataPropertyName = nameof(MainWarehouseRow.PurchaseDate),
             HeaderText = "تاريخ الشراء",
             FillWeight = 12,
@@ -1052,7 +1012,6 @@ public partial class MainForm
                 PurchasedQuantity = purchase.Quantity,
                 OnHandAtMain = onHand,
                 PurchasePrice = purchase.PurchasePrice,
-                RetailUnitPrice = purchase.Product.UnitPrice,
                 PurchaseDate = purchase.PurchaseDate,
                 PackageSize = purchase.Product.PackageSize,
                 ProductCategory = purchase.Product.ProductCategory
@@ -1087,7 +1046,6 @@ public partial class MainForm
                 PurchasedQuantity = qty,
                 OnHandAtMain = qty,
                 PurchasePrice = 0,
-                RetailUnitPrice = p.UnitPrice,
                 PurchaseDate = DateTime.Today,
                 PackageSize = p.PackageSize,
                 ProductCategory = p.ProductCategory
@@ -1172,17 +1130,6 @@ public partial class MainForm
             var purchasePrice = ws.Cell(row, 6).GetValue<decimal>();
             var productionDate = ws.Cell(row, 7).GetDateTime();
             var purchaseDate = ws.Cell(row, 8).GetDateTime();
-            decimal? retailOverride = null;
-            try
-            {
-                var retailCell = ws.Cell(row, 9);
-                if (!retailCell.IsEmpty() && retailCell.TryGetValue<decimal>(out var rv))
-                    retailOverride = rv;
-            }
-            catch
-            {
-                /* column 9 optional for older templates */
-            }
 
             if (qty <= 0) continue;
             if (string.IsNullOrWhiteSpace(category)) category = "Oil";
@@ -1201,23 +1148,16 @@ public partial class MainForm
                 x.CompanyId == companyRow.Id && x.Name == name && x.ProductCategory == category && x.PackageSize == pack);
             if (product is null)
             {
-                var initialRetail = retailOverride ?? purchasePrice;
-                if (initialRetail < 0) initialRetail = 0;
                 product = new Domain.Product
                 {
                     CompanyId = companyRow.Id,
                     Name = name,
                     ProductCategory = category,
                     PackageSize = pack,
-                    UnitPrice = initialRetail,
+                    UnitPrice = 0,
                     IsActive = true
                 };
                 db.Products.Add(product);
-                await db.SaveChangesAsync();
-            }
-            else if (retailOverride.HasValue)
-            {
-                product.UnitPrice = retailOverride.Value;
                 await db.SaveChangesAsync();
             }
 
@@ -1267,7 +1207,6 @@ public partial class MainForm
         ws.Cell(1, 6).Value = "تكلفة الشراء (وحدة)";
         ws.Cell(1, 7).Value = "تاريخ الإنتاج";
         ws.Cell(1, 8).Value = "تاريخ الشراء";
-        ws.Cell(1, 9).Value = "سعر البيع (نقطة البيع)";
         ws.Row(1).Style.Font.Bold = true;
 
         var r = 2;
@@ -1282,7 +1221,6 @@ public partial class MainForm
             ws.Cell(r, 6).Value = 0;
             ws.Cell(r, 7).Value = DateTime.Today;
             ws.Cell(r, 8).Value = DateTime.Today;
-            ws.Cell(r, 9).Value = p.UnitPrice;
             r++;
         }
 
@@ -1294,7 +1232,7 @@ public partial class MainForm
 
     private async Task AddMainWarehouseManualAsync()
     {
-        if (!TryGetMainWarehouseAddInputs(out var catalog, out var quantity, out var purchasePrice, out var retailUnitPrice, out var productionDate, out var purchaseDate, out var err))
+        if (!TryGetMainWarehouseAddInputs(out var catalog, out var quantity, out var purchasePrice, out var productionDate, out var purchaseDate, out var err))
         {
             MessageBox.Show(err ?? "أكمل الحقول المطلوبة قبل الإضافة.", "المستودع الرئيسي", MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, MsgRtl);
             return;
@@ -1313,13 +1251,6 @@ public partial class MainForm
             "إضافة يدوية من شاشة المستودع الرئيسي",
             _currentUser.Id));
 
-        await using (var db = await _dbFactory.CreateDbContextAsync())
-        {
-            var productEntity = await db.Products.FirstAsync(x => x.Id == catalog.Id);
-            productEntity.UnitPrice = retailUnitPrice;
-            await db.SaveChangesAsync();
-        }
-
         await RefreshAllStockViewsAsync();
         PrepareMainWarehouseFormForNextBatch();
         await RefreshMainWarehouseAvailableStockHintAsync();
@@ -1337,12 +1268,6 @@ public partial class MainForm
 
         var quantity = ReadCommittedNumericUpDown(_mwQuantity);
         var purchasePrice = ReadCommittedNumericUpDown(_mwPurchasePrice);
-        var retailUnitPrice = ReadCommittedNumericUpDown(_mwRetailPrice);
-        if (retailUnitPrice < 0)
-        {
-            MessageBox.Show("سعر البيع لا يمكن أن يكون سالباً.", "تعديل", MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, MsgRtl);
-            return;
-        }
 
         await using var db = await _dbFactory.CreateDbContextAsync();
         var purchase = await db.Purchases.FirstOrDefaultAsync(x => x.Id == _selectedMainPurchaseId.Value);
@@ -1366,7 +1291,6 @@ public partial class MainForm
         product.CompanyId = catalogRow.CompanyId;
         product.ProductCategory = catalogRow.ProductCategory;
         product.PackageSize = catalogRow.PackageSize;
-        product.UnitPrice = retailUnitPrice;
 
         purchase.Quantity = quantity;
         purchase.PurchasePrice = purchasePrice;
@@ -1484,7 +1408,6 @@ public partial class MainForm
         _mwPurchasePrice.Value = Math.Clamp(row.PurchasePrice, _mwPurchasePrice.Minimum, _mwPurchasePrice.Maximum);
         _mwProductionDate.Value = row.ProductionDate == default ? DateTime.Today : row.ProductionDate;
         _mwPurchaseDate.Value = row.PurchaseDate == default ? DateTime.Today : row.PurchaseDate;
-        SyncMainWarehouseRetailFromSelectedCatalog();
         _ = RefreshMainWarehouseAvailableStockHintAsync();
         SyncMainWarehouseCommandStates();
     }
@@ -1536,8 +1459,7 @@ public partial class MainForm
             CompanyName = p.Company?.Name ?? string.Empty,
             Name = p.Name,
             ProductCategory = p.ProductCategory,
-            PackageSize = p.PackageSize,
-            RetailUnitPrice = p.UnitPrice
+            PackageSize = p.PackageSize
         }).ToList();
 
         var bulkComboList = new List<MainWarehouseCatalogRow>
@@ -1564,7 +1486,6 @@ public partial class MainForm
 
         ApplyBulkPurchaseProductColumnDataSource();
 
-        SyncMainWarehouseRetailFromSelectedCatalog();
         await RefreshMainWarehouseAvailableStockHintAsync();
         await SyncMainWarehouseBranchPricePanelAsync();
         SyncMainWarehouseCommandStates();
@@ -1594,7 +1515,6 @@ public partial class MainForm
             _mwProductLookup.SelectedIndex = -1;
             _mwQuantity.Value = 0;
             _mwPurchasePrice.Value = 0;
-            _mwRetailPrice.Value = 0;
             _mwProductionDate.Value = DateTime.Today;
             _mwPurchaseDate.Value = DateTime.Today;
             _mainWarehouseGrid.ClearSelection();
@@ -1756,8 +1676,6 @@ public partial class MainForm
         public string PackageSize { get; set; } = string.Empty;
         /// <summary>When true, shown as the empty option in bulk purchase line combos.</summary>
         public bool IsPlaceholder { get; set; }
-        /// <summary>POS retail from <see cref="Domain.Product.UnitPrice"/>.</summary>
-        public decimal RetailUnitPrice { get; set; }
         public string Caption =>
             IsPlaceholder
                 ? "— اختر الصنف —"
@@ -1789,8 +1707,6 @@ public partial class MainForm
         /// <summary>Total on-hand at Main for this product; null on extra lines for the same product (same value otherwise).</summary>
         public decimal? OnHandAtMain { get; set; }
         public decimal PurchasePrice { get; set; }
-        /// <summary>Current POS / shelf price on the product master (<see cref="Domain.Product.UnitPrice"/>).</summary>
-        public decimal RetailUnitPrice { get; set; }
         public DateTime PurchaseDate { get; set; }
         public string ProductCategory { get; set; } = string.Empty;
         public string PackageSize { get; set; } = string.Empty;

@@ -45,6 +45,7 @@ public partial class MainForm : Form
     private readonly IReportService _reportService;
     private readonly IExpenseService _expenseService;
     private readonly ITransferService _transferService;
+    private readonly IAuthService _authService;
     private readonly IWarehouseService _warehouseService;
     private readonly ICustomerService _customerService;
     private readonly AppUser _currentUser;
@@ -207,6 +208,32 @@ public partial class MainForm : Form
     private readonly ComboBox _transferToWarehouseCombo = new() { Width = 220, DropDownStyle = ComboBoxStyle.DropDownList, RightToLeft = RightToLeft.Yes };
     private readonly ComboBox _transferProductCombo = new() { Width = 400, DropDownStyle = ComboBoxStyle.DropDownList, RightToLeft = RightToLeft.Yes };
     private readonly NumericUpDown _transferQty = new() { DecimalPlaces = 3, Width = 140, Maximum = 100000, RightToLeft = RightToLeft.Yes };
+    private readonly CheckBox _transferApplyBranchSalePriceCheck = new()
+    {
+        Text = "تحديث سعر بيع الفرع (نقطة البيع) عند التحويل",
+        AutoSize = true,
+        Checked = false,
+        Enabled = false,
+        RightToLeft = RightToLeft.Yes
+    };
+    private readonly NumericUpDown _transferBranchSalePrice = new()
+    {
+        DecimalPlaces = 2,
+        Minimum = 0,
+        Maximum = 10000000,
+        Width = 140,
+        Enabled = false,
+        RightToLeft = RightToLeft.Yes
+    };
+    private readonly Label _transferBranchSalePriceHint = new()
+    {
+        AutoSize = true,
+        ForeColor = UiTextSecondary,
+        Font = UiFont,
+        Text = string.Empty,
+        RightToLeft = RightToLeft.Yes,
+        Padding = new Padding(0, 2, 0, 0)
+    };
     private Label? _mwHeaderTitleLabel;
     private Label? _mwHeaderUserLabel;
     private Label? _mwAvailableStockLabel;
@@ -290,14 +317,6 @@ public partial class MainForm : Form
         Maximum = 1000000,
         Tag = MainWarehouseUiLabelTag
     };
-    /// <summary><see cref="Domain.Product.UnitPrice"/> — shelf / POS selling price (not purchase cost).</summary>
-    private readonly NumericUpDown _mwRetailPrice = new()
-    {
-        Width = 118,
-        DecimalPlaces = 2,
-        Maximum = 1000000,
-        Tag = MainWarehouseUiLabelTag
-    };
     private readonly ComboBox _mwBranchPriceWarehouseCombo = new()
     {
         Width = 200,
@@ -360,6 +379,10 @@ public partial class MainForm : Form
     private readonly CheckBox _branchActive = new() { Text = "نشط (يظهر في نقطة البيع والمخزون)", AutoSize = true, Checked = true };
     private int? _selectedBranchId;
     private bool _suppressBranchRowLoad;
+    private readonly ComboBox _branchLoginUserCombo = new() { Width = 200, DropDownStyle = ComboBoxStyle.DropDownList, RightToLeft = RightToLeft.Yes };
+    private readonly ComboBox _branchLoginWarehouseCombo = new() { Width = 280, DropDownStyle = ComboBoxStyle.DropDownList, RightToLeft = RightToLeft.Yes };
+    private bool _suppressBranchLoginWarehouseSync;
+    private bool _branchLoginEventsAttached;
 
     private readonly DataGridView _catalogCompaniesGrid = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, ReadOnly = true };
     private readonly DataGridView _catalogProductsGrid = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, ReadOnly = true };

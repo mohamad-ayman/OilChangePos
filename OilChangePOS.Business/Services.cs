@@ -405,6 +405,14 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
         if (available < request.Quantity)
             throw new InvalidOperationException($"لا يمكن التحويل أكثر من الرصيد المتاح. المتاح={available}، المطلوب={request.Quantity}");
 
+        if (request.BranchSalePriceForDestination is { } branchPx)
+        {
+            if (branchPx < 0)
+                throw new InvalidOperationException("سعر البيع للفرع لا يمكن أن يكون سالباً.");
+            if (fromWh.Type != WarehouseType.Main || toWh.Type != WarehouseType.Branch)
+                throw new InvalidOperationException("تحديث سعر بيع الفرع متاح فقط عند التحويل من المستودع الرئيسي إلى فرع.");
+        }
+
         // Main → branch: consume oldest production batches first (FEFO) and record SourcePurchaseId per slice.
         var useFefo = fromWh.Type == WarehouseType.Main && toWh.Type == WarehouseType.Branch;
         if (!useFefo)
@@ -419,6 +427,7 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
                 Notes = request.Notes
             };
             db.StockMovements.Add(single);
+            await ApplyDestinationBranchSalePriceIfNeededAsync(db, request, fromWh, toWh, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
             return single.Id;
         }
@@ -490,6 +499,10 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
                     firstId = movement.Id;
             }
 
+            await ApplyDestinationBranchSalePriceIfNeededAsync(db, request, fromWh, toWh, cancellationToken);
+            if (request.BranchSalePriceForDestination.HasValue)
+                await db.SaveChangesAsync(cancellationToken);
+
             await tx.CommitAsync(cancellationToken);
             return firstId;
         }
@@ -498,6 +511,37 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
             await tx.RollbackAsync(cancellationToken);
             throw;
         }
+    }
+
+    /// <summary>Mutates <paramref name="db"/> (tracked entities only). Caller saves when a branch price was applied.</summary>
+    private static async Task ApplyDestinationBranchSalePriceIfNeededAsync(
+        OilChangePosDbContext db,
+        TransferStockRequest request,
+        Warehouse fromWh,
+        Warehouse toWh,
+        CancellationToken cancellationToken)
+    {
+        if (request.BranchSalePriceForDestination is not { } price)
+            return;
+        if (fromWh.Type != WarehouseType.Main || toWh.Type != WarehouseType.Branch)
+            return;
+
+        _ = await db.Products.AsNoTracking().FirstOrDefaultAsync(x => x.Id == request.ProductId, cancellationToken)
+            ?? throw new InvalidOperationException($"الصنف {request.ProductId} غير موجود.");
+
+        var row = await db.BranchProductPrices.FirstOrDefaultAsync(
+            x => x.WarehouseId == request.ToWarehouseId && x.ProductId == request.ProductId, cancellationToken);
+        if (row is null)
+        {
+            db.BranchProductPrices.Add(new BranchProductPrice
+            {
+                WarehouseId = request.ToWarehouseId,
+                ProductId = request.ProductId,
+                SalePrice = price
+            });
+        }
+        else
+            row.SalePrice = price;
     }
 }
 
@@ -1544,6 +1588,48 @@ public class AuthService(IDbContextFactory<OilChangePosDbContext> dbFactory) : I
             cancellationToken);
         if (user is null) return null;
         return string.Equals(user.PasswordHash, hash, StringComparison.OrdinalIgnoreCase) ? user : null;
+    }
+
+    public async Task<IReadOnlyList<BranchRoleUserDto>> ListBranchRoleUsersAsync(int adminUserId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await AssertAuthAdminAsync(db, adminUserId, cancellationToken);
+        return await db.Users.AsNoTracking()
+            .Where(x => x.Role == UserRole.Branch)
+            .OrderBy(x => x.Username)
+            .Select(x => new BranchRoleUserDto(x.Id, x.Username, x.HomeBranchWarehouseId))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task SetUserHomeBranchWarehouseAsync(int adminUserId, int targetUserId, int? homeBranchWarehouseId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await AssertAuthAdminAsync(db, adminUserId, cancellationToken);
+        var target = await db.Users.FirstOrDefaultAsync(x => x.Id == targetUserId, cancellationToken)
+            ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        if (target.Role != UserRole.Branch)
+            throw new InvalidOperationException("يُحدَّد فرع الدخول لمستخدمي صلاحية «فرع» فقط.");
+
+        if (homeBranchWarehouseId is { } wid)
+        {
+            var wh = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == wid, cancellationToken)
+                ?? throw new InvalidOperationException("المستودع غير موجود.");
+            if (wh.Type != WarehouseType.Branch)
+                throw new InvalidOperationException("فرع الدخول يجب أن يكون مستودع فرع.");
+            if (!wh.IsActive)
+                throw new InvalidOperationException("لا يمكن ربط مستخدم بفرع معطّل.");
+        }
+
+        target.HomeBranchWarehouseId = homeBranchWarehouseId;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task AssertAuthAdminAsync(OilChangePosDbContext db, int userId, CancellationToken cancellationToken)
+    {
+        var u = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
+            ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        if (u.Role != UserRole.Admin)
+            throw new InvalidOperationException("المسؤولون فقط يمكنهم هذه العملية.");
     }
 
     public static string ComputeHash(string value)

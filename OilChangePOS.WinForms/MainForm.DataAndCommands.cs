@@ -54,7 +54,7 @@ public partial class MainForm : Form
         if (mainWarehouse is not null)
             _transferFromWarehouseCombo.SelectedValue = mainWarehouse.Id;
 
-        var defaultBranch = branches.FirstOrDefault() ?? allWarehouses.FirstOrDefault(w => w.Type == WarehouseType.Branch);
+        var defaultBranch = ResolvePreferredBranchForCurrentUser(branches, allWarehouses);
         if (defaultBranch is not null)
         {
             _transferToWarehouseCombo.SelectedValue = defaultBranch.Id;
@@ -185,8 +185,25 @@ public partial class MainForm : Form
         if (TryGetWarehouseIdFromCombo(_inventoryWarehouseCombo, out var fromInventory)) return (true, fromInventory);
         if (TryGetWarehouseIdFromCombo(_posWarehouseCombo, out var fromPos)) return (true, fromPos);
         var branches = await _warehouseService.GetBranchesAsync();
+        if (_currentUser.Role == UserRole.Branch && _currentUser.HomeBranchWarehouseId is { } homeId
+            && branches.Any(b => b.Id == homeId))
+            return (true, homeId);
         if (branches.FirstOrDefault() is { } b) return (true, b.Id);
         return (false, 0);
+    }
+
+    /// <summary>Branch-role users can pin a default active branch; otherwise the first active branch by name is used.</summary>
+    private WarehouseDto? ResolvePreferredBranchForCurrentUser(IReadOnlyList<WarehouseDto> activeBranches, IReadOnlyList<WarehouseDto>? allWarehouses = null)
+    {
+        if (_currentUser.Role == UserRole.Branch && _currentUser.HomeBranchWarehouseId is { } hid)
+        {
+            var hit = activeBranches.FirstOrDefault(b => b.Id == hid);
+            if (hit is not null)
+                return hit;
+        }
+
+        return activeBranches.FirstOrDefault()
+               ?? allWarehouses?.FirstOrDefault(w => w.Type == WarehouseType.Branch && w.IsActive);
     }
 
     private async Task RefreshAllStockViewsAsync()
@@ -239,6 +256,73 @@ public partial class MainForm : Form
             _transferQty.Maximum = 100000;
 
         SyncTransferQtyLimitFromSelection();
+        await RefreshTransferBranchPriceRowAsync();
+    }
+
+    private async Task RefreshTransferBranchPriceRowAsync()
+    {
+        _transferBranchSalePriceHint.Text = string.Empty;
+        _transferApplyBranchSalePriceCheck.Enabled = false;
+        _transferBranchSalePrice.Enabled = false;
+
+        if (_transferFromWarehouseCombo.SelectedItem is not WarehouseDto fromWh
+            || _transferToWarehouseCombo.SelectedItem is not WarehouseDto toWh)
+            return;
+
+        var mainToBranch = fromWh.Type == WarehouseType.Main && toWh.Type == WarehouseType.Branch;
+        if (!mainToBranch)
+        {
+            _transferApplyBranchSalePriceCheck.Checked = false;
+            return;
+        }
+
+        _transferApplyBranchSalePriceCheck.Enabled = true;
+        _transferBranchSalePrice.Enabled = _transferApplyBranchSalePriceCheck.Checked;
+
+        if (!TryGetWarehouseIdFromCombo(_transferToWarehouseCombo, out var toId))
+            return;
+        if (_transferProductCombo.SelectedItem is not TransferProductRow row)
+            return;
+
+        try
+        {
+            var eff = await _inventoryService.GetEffectiveSalePriceAsync(row.ProductId, toId);
+            _transferBranchSalePriceHint.Text = $"السعر الظاهر حالياً في فرع الوجهة: {eff:n2} ج.م";
+        }
+        catch
+        {
+            _transferBranchSalePriceHint.Text = string.Empty;
+        }
+    }
+
+    private async Task OnTransferApplyBranchSalePriceCheckChangedAsync()
+    {
+        var mainToBranch = _transferFromWarehouseCombo.SelectedItem is WarehouseDto f && f.Type == WarehouseType.Main
+                           && _transferToWarehouseCombo.SelectedItem is WarehouseDto t && t.Type == WarehouseType.Branch;
+        if (!mainToBranch)
+        {
+            _transferBranchSalePrice.Enabled = false;
+            return;
+        }
+
+        _transferBranchSalePrice.Enabled = _transferApplyBranchSalePriceCheck.Checked;
+        if (!_transferApplyBranchSalePriceCheck.Checked)
+            return;
+
+        if (!TryGetWarehouseIdFromCombo(_transferToWarehouseCombo, out var toId)
+            || _transferProductCombo.SelectedItem is not TransferProductRow row)
+            return;
+
+        try
+        {
+            var eff = await _inventoryService.GetEffectiveSalePriceAsync(row.ProductId, toId);
+            var clamped = Math.Clamp(eff, _transferBranchSalePrice.Minimum, _transferBranchSalePrice.Maximum);
+            _transferBranchSalePrice.Value = clamped;
+        }
+        catch
+        {
+            // keep current nud value
+        }
     }
 
     private void SyncTransferQtyLimitFromSelection()
@@ -402,6 +486,9 @@ public partial class MainForm : Form
     {
         if (TryGetWarehouseIdFromCombo(_inventoryWarehouseCombo, out var id)) return id;
         var branches = await _warehouseService.GetBranchesAsync();
+        if (_currentUser.Role == UserRole.Branch && _currentUser.HomeBranchWarehouseId is { } homeId
+            && branches.Any(b => b.Id == homeId))
+            return homeId;
         if (branches.FirstOrDefault() is { } b) return b.Id;
         throw new InvalidOperationException("يرجى اختيار مستودع فرع.");
     }
@@ -453,6 +540,21 @@ public partial class MainForm : Form
 
         var productId = transferRow.ProductId;
 
+        decimal? branchSaleForDestination = null;
+        if (_transferApplyBranchSalePriceCheck.Checked)
+        {
+            if (_transferFromWarehouseCombo.SelectedItem is not WarehouseDto fromDto
+                || _transferToWarehouseCombo.SelectedItem is not WarehouseDto toDto
+                || fromDto.Type != WarehouseType.Main || toDto.Type != WarehouseType.Branch)
+            {
+                MessageBox.Show("تحديث سعر بيع الفرع يُطبّق فقط عند التحويل من المستودع الرئيسي إلى فرع.", "التحويلات",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, MsgRtl);
+                return;
+            }
+
+            branchSaleForDestination = ReadCommittedNumericUpDown(_transferBranchSalePrice);
+        }
+
         try
         {
             await _transferService.TransferStockAsync(new TransferStockRequest(
@@ -461,7 +563,8 @@ public partial class MainForm : Form
                 fromWarehouseId,
                 toWarehouseId,
                 "تحويل يدوي من شاشة التحويلات",
-                _currentUser.Id));
+                _currentUser.Id,
+                branchSaleForDestination));
 
             MessageBox.Show("اكتمل التحويل.", "تم", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1,
                 MsgRtl);

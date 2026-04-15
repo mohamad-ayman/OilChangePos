@@ -17,7 +17,8 @@ public record PurchaseReceiptLineInput(
 
 /// <summary>Result of <see cref="IInventoryService.AddPurchaseReceiptBatchAsync"/>.</summary>
 public record PurchaseReceiptBatchResult(int LinesPosted, IReadOnlyList<int> PurchaseIds);
-public record TransferStockRequest(int ProductId, decimal Quantity, int FromWarehouseId, int ToWarehouseId, string Notes, int UserId);
+/// <param name="BranchSalePriceForDestination">When set, updates <see cref="BranchProductPrice"/> for the destination branch (only valid for Main → Branch transfers).</param>
+public record TransferStockRequest(int ProductId, decimal Quantity, int FromWarehouseId, int ToWarehouseId, string Notes, int UserId, decimal? BranchSalePriceForDestination = null);
 public record AuditLineRequest(int ProductId, decimal ActualQuantity, int WarehouseId, string? ReasonCode = null);
 public record OilChangeRequest(int CustomerId, int CarId, int OdometerKm, int UserId, int WarehouseId, List<SaleItemRequest> Details);
 public record SetBranchPriceRequest(int ProductId, int WarehouseId, decimal SalePrice, int UserId);
@@ -120,7 +121,12 @@ public interface ICustomerService
 public interface IAuthService
 {
     Task<AppUser?> LoginAsync(string username, string password, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BranchRoleUserDto>> ListBranchRoleUsersAsync(int adminUserId, CancellationToken cancellationToken = default);
+    Task SetUserHomeBranchWarehouseAsync(int adminUserId, int targetUserId, int? homeBranchWarehouseId, CancellationToken cancellationToken = default);
 }
+
+/// <summary>Users with <see cref="UserRole.Branch"/> for admin assignment of default POS warehouse.</summary>
+public record BranchRoleUserDto(int Id, string Username, int? HomeBranchWarehouseId);
 
 public interface IWarehouseService
 {

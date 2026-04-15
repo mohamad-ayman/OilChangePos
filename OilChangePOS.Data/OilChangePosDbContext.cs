@@ -180,6 +180,8 @@ public class OilChangePosDbContext(DbContextOptions<OilChangePosDbContext> optio
             b.Property(x => x.Username).HasMaxLength(50).IsRequired();
             b.Property(x => x.PasswordHash).HasMaxLength(256).IsRequired();
             b.HasIndex(x => x.Username).IsUnique();
+            b.HasOne(x => x.HomeBranchWarehouse).WithMany().HasForeignKey(x => x.HomeBranchWarehouseId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

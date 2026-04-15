@@ -19,6 +19,7 @@ public partial class MainForm : Form
         ITransferService transferService,
         IWarehouseService warehouseService,
         ICustomerService customerService,
+        IAuthService authService,
         AppUser currentUser)
     {
         _dbFactory = dbFactory;
@@ -29,6 +30,7 @@ public partial class MainForm : Form
         _transferService = transferService;
         _warehouseService = warehouseService;
         _customerService = customerService;
+        _authService = authService;
         _currentUser = currentUser;
 
         RightToLeft = RightToLeft.Yes;

@@ -48,6 +48,9 @@ public static class DatabaseInitializer
             await dbContext.Database.MigrateAsync();
         }
 
+        // Keeps local DB in sync if Migrate did not apply (e.g. older deployed build) — matches migration AddAppUserHomeBranchWarehouse.
+        await EnsureUserHomeBranchWarehouseSchemaAsync(dbContext);
+
         // Products.CompanyId must exist before any EF query on Product and before warehouse scripts touch Products.
         await EnsureCatalogCompaniesAsync(dbContext);
         await EnsureWarehouseSchemaAsync(dbContext);
@@ -650,6 +653,35 @@ public static class DatabaseInitializer
                 IF OBJECT_ID(N'[dbo].[Users]', N'U') IS NOT NULL
                     ALTER TABLE [dbo].[Expenses] ADD CONSTRAINT [FK_Expenses_Users_CreatedByUserId]
                         FOREIGN KEY ([CreatedByUserId]) REFERENCES [dbo].[Users]([Id]);
+            END
+            """);
+    }
+
+    private static async Task EnsureUserHomeBranchWarehouseSchemaAsync(OilChangePosDbContext dbContext)
+    {
+        await dbContext.Database.ExecuteSqlRawAsync(
+            """
+            IF OBJECT_ID(N'[dbo].[Users]', N'U') IS NOT NULL
+            BEGIN
+                IF COL_LENGTH(N'dbo.Users', N'HomeBranchWarehouseId') IS NULL
+                    ALTER TABLE [dbo].[Users] ADD [HomeBranchWarehouseId] INT NULL;
+
+                IF NOT EXISTS (
+                    SELECT 1 FROM sys.indexes
+                    WHERE object_id = OBJECT_ID(N'dbo.Users') AND name = N'IX_Users_HomeBranchWarehouseId')
+                BEGIN
+                    CREATE INDEX [IX_Users_HomeBranchWarehouseId] ON [dbo].[Users]([HomeBranchWarehouseId]);
+                END
+
+                IF OBJECT_ID(N'[dbo].[Warehouses]', N'U') IS NOT NULL
+                   AND NOT EXISTS (
+                       SELECT 1 FROM sys.foreign_keys
+                       WHERE parent_object_id = OBJECT_ID(N'dbo.Users')
+                         AND name = N'FK_Users_Warehouses_HomeBranchWarehouseId')
+                BEGIN
+                    ALTER TABLE [dbo].[Users] ADD CONSTRAINT [FK_Users_Warehouses_HomeBranchWarehouseId]
+                        FOREIGN KEY ([HomeBranchWarehouseId]) REFERENCES [dbo].[Warehouses]([Id]) ON DELETE SET NULL;
+                END
             END
             """);
     }

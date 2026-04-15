@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using ClosedXML.Excel;
 using OilChangePOS.Business;
 using OilChangePOS.Data;
@@ -208,6 +208,7 @@ public partial class MainForm : Form
         return tab;
     }
 
+
     private TabPage BuildAuditTab()
     {
         var tab = new TabPage("جرد المخزون");
@@ -348,7 +349,7 @@ public partial class MainForm : Form
         var root = new Panel { Dock = DockStyle.Fill, Padding = new Padding(24, 20, 24, 20), BackColor = Color.FromArgb(245, 247, 250), RightToLeft = RightToLeft.No, AutoScroll = true };
         var transferHeader = BuildStandardModuleHeaderCard(
             "تحويل بين المستودعات",
-            "المستودع الرئيسي يستقبل المشتريات؛ لكل فرع رصيده. التحويل من الرئيسي للفرع يستهلك أقدم تاريخ إنتاج أولاً (FEFO) وقد يظهر عدة أسطر في السجل. التحويل بين الفروع غير مسموح. اختر «من المستودع» أولاً؛ الأصناف المعروضة لها رصيد هناك.",
+            "المستودع الرئيسي يستقبل المشتريات؛ لكل فرع رصيده. التحويل من الرئيسي للفرع يستهلك أقدم تاريخ إنتاج أولاً (FEFO) وقد يظهر عدة أسطر في السجل. التحويل بين الفروع غير مسموح. اختر «من المستودع» أولاً؛ الأصناف المعروضة لها رصيد هناك. عند التحويل من الرئيسي إلى فرع يمكنك اختيارياً تحديث سعر البيع في نقطة بيع ذلك الفرع.",
             subtitleItalic: true,
             DockStyle.Top,
             autoSizeHeight: true,
@@ -356,15 +357,28 @@ public partial class MainForm : Form
             out _);
         transferHeader.Margin = new Padding(0, 0, 0, 12);
 
-        _transferFromWarehouseCombo.SelectedIndexChanged += async (_, _) => await RefreshTransferProductsAsync();
-        _transferProductCombo.SelectedIndexChanged += (_, _) => SyncTransferQtyLimitFromSelection();
+        _transferFromWarehouseCombo.SelectedIndexChanged += async (_, _) =>
+        {
+            await RefreshTransferProductsAsync();
+            await RefreshTransferBranchPriceRowAsync();
+        };
+        _transferToWarehouseCombo.SelectedIndexChanged += async (_, _) => await RefreshTransferBranchPriceRowAsync();
+        _transferProductCombo.SelectedIndexChanged += (_, _) =>
+        {
+            SyncTransferQtyLimitFromSelection();
+            _ = RefreshTransferBranchPriceRowAsync();
+        };
+        _transferApplyBranchSalePriceCheck.CheckedChanged += async (_, _) =>
+        {
+            await OnTransferApplyBranchSalePriceCheckChangedAsync();
+        };
         var form = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             ColumnCount = 2,
-            RowCount = 5,
+            RowCount = 8,
             RightToLeft = RightToLeft.Yes,
             Padding = new Padding(16, 14, 16, 16),
             Margin = new Padding(0, 0, 0, 8),
@@ -377,6 +391,9 @@ public partial class MainForm : Form
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        form.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        form.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        form.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
 
         var transferButton = BuildButton("تنفيذ التحويل", Color.FromArgb(41, 128, 185));
@@ -391,7 +408,21 @@ public partial class MainForm : Form
         form.Controls.Add(_transferProductCombo, 1, 2);
         form.Controls.Add(new Label { Text = "الكمية", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill, Font = UiFontCaption, ForeColor = UiTextPrimary, RightToLeft = RightToLeft.Yes }, 0, 3);
         form.Controls.Add(_transferQty, 1, 3);
-        form.Controls.Add(transferButton, 1, 4);
+        form.SetColumnSpan(_transferApplyBranchSalePriceCheck, 2);
+        form.Controls.Add(_transferApplyBranchSalePriceCheck, 0, 4);
+        form.Controls.Add(new Label
+        {
+            Text = "سعر البيع في فرع الوجهة (ج.م)",
+            TextAlign = ContentAlignment.MiddleRight,
+            Dock = DockStyle.Fill,
+            Font = UiFontCaption,
+            ForeColor = UiTextPrimary,
+            RightToLeft = RightToLeft.Yes
+        }, 0, 5);
+        form.Controls.Add(_transferBranchSalePrice, 1, 5);
+        form.SetColumnSpan(_transferBranchSalePriceHint, 2);
+        form.Controls.Add(_transferBranchSalePriceHint, 0, 6);
+        form.Controls.Add(transferButton, 1, 7);
 
         root.Controls.Add(form);
         root.Controls.Add(transferHeader);
