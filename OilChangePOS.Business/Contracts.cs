@@ -5,6 +5,18 @@ namespace OilChangePOS.Business;
 public record SaleItemRequest(int ProductId, decimal Quantity);
 public record CompleteSaleRequest(int? CustomerId, decimal DiscountAmount, int UserId, int WarehouseId, List<SaleItemRequest> Items);
 public record PurchaseStockRequest(int ProductId, decimal Quantity, decimal PurchasePrice, DateTime ProductionDate, DateTime PurchaseDate, int WarehouseId, string Notes, int UserId);
+
+/// <summary>One line on a multi-SKU purchase receipt (same supplier, posted to main warehouse).</summary>
+public record PurchaseReceiptLineInput(
+    int ProductId,
+    decimal Quantity,
+    decimal UnitPurchasePrice,
+    DateTime PurchaseDate,
+    DateTime ProductionDate,
+    string? LineNote);
+
+/// <summary>Result of <see cref="IInventoryService.AddPurchaseReceiptBatchAsync"/>.</summary>
+public record PurchaseReceiptBatchResult(int LinesPosted, IReadOnlyList<int> PurchaseIds);
 public record TransferStockRequest(int ProductId, decimal Quantity, int FromWarehouseId, int ToWarehouseId, string Notes, int UserId);
 public record AuditLineRequest(int ProductId, decimal ActualQuantity, int WarehouseId, string? ReasonCode = null);
 public record OilChangeRequest(int CustomerId, int CarId, int OdometerKm, int UserId, int WarehouseId, List<SaleItemRequest> Details);
@@ -15,6 +27,19 @@ public interface IInventoryService
     Task<decimal> GetCurrentStockAsync(int productId, int warehouseId, CancellationToken cancellationToken = default);
     Task<List<LowStockItemDto>> GetLowStockAsync(int warehouseId, CancellationToken cancellationToken = default);
     Task<int> AddStockAsync(PurchaseStockRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Posts several purchase lines in one database transaction (main warehouse only).
+    /// Each line becomes a <see cref="Domain.Purchase"/> plus matching <see cref="Domain.StockMovement"/>.
+    /// Per-line purchase and production dates are taken from <see cref="PurchaseReceiptLineInput"/>.
+    /// </summary>
+    Task<PurchaseReceiptBatchResult> AddPurchaseReceiptBatchAsync(
+        int userId,
+        int warehouseId,
+        string supplierName,
+        string? receiptMemo,
+        IReadOnlyList<PurchaseReceiptLineInput> lines,
+        CancellationToken cancellationToken = default);
     Task<StockAuditResultDto> RunStockAuditAsync(int userId, int warehouseId, List<AuditLineRequest> lines, string notes, CancellationToken cancellationToken = default);
     Task<List<StockAuditHistoryRowDto>> GetStockAuditHistoryAsync(int? warehouseId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken cancellationToken = default);
 

@@ -181,9 +181,10 @@ public partial class MainForm : Form
         menu.Controls.Add(BuildMenuButton("الشركات والأصناف", 3));
         menu.Controls.Add(BuildMenuButton("الفروع", 4));
         menu.Controls.Add(BuildMenuButton("المستودع الرئيسي", 5));
-        menu.Controls.Add(BuildMenuButton("التحويلات", 6));
-        menu.Controls.Add(BuildMenuButton("جرد المخزون", 7));
-        menu.Controls.Add(BuildMenuButton("التقارير", 8));
+        menu.Controls.Add(BuildMenuButton("استلام مشتريات", 6));
+        menu.Controls.Add(BuildMenuButton("التحويلات", 7));
+        menu.Controls.Add(BuildMenuButton("جرد المخزون", 8));
+        menu.Controls.Add(BuildMenuButton("التقارير", 9));
 
         panel.Controls.Add(menu);
         panel.Controls.Add(header);
@@ -265,6 +266,7 @@ public partial class MainForm : Form
         _mainTabs.TabPages.Add(BuildCatalogTab());
         _mainTabs.TabPages.Add(BuildBranchesAdminTab());
         _mainTabs.TabPages.Add(BuildMainWarehouseTab());
+        _mainTabs.TabPages.Add(BuildBulkPurchaseTab());
         _mainTabs.TabPages.Add(BuildTransferTab());
         _mainTabs.TabPages.Add(BuildAuditTab());
         _mainTabs.TabPages.Add(BuildReportsTab());

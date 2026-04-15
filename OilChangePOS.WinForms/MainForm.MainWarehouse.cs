@@ -1540,6 +1540,13 @@ public partial class MainForm
             RetailUnitPrice = p.UnitPrice
         }).ToList();
 
+        var bulkComboList = new List<MainWarehouseCatalogRow>
+        {
+            new() { Id = 0, IsPlaceholder = true }
+        };
+        bulkComboList.AddRange(list);
+        _bulkPurchaseProductComboDataSource = bulkComboList;
+
         _syncingMainWarehouseProductCombo = true;
         try
         {
@@ -1554,6 +1561,8 @@ public partial class MainForm
         {
             _syncingMainWarehouseProductCombo = false;
         }
+
+        ApplyBulkPurchaseProductColumnDataSource();
 
         SyncMainWarehouseRetailFromSelectedCatalog();
         await RefreshMainWarehouseAvailableStockHintAsync();
@@ -1745,12 +1754,16 @@ public partial class MainForm
         public string Name { get; set; } = string.Empty;
         public string ProductCategory { get; set; } = string.Empty;
         public string PackageSize { get; set; } = string.Empty;
+        /// <summary>When true, shown as the empty option in bulk purchase line combos.</summary>
+        public bool IsPlaceholder { get; set; }
         /// <summary>POS retail from <see cref="Domain.Product.UnitPrice"/>.</summary>
         public decimal RetailUnitPrice { get; set; }
         public string Caption =>
-            string.IsNullOrWhiteSpace(CompanyName)
-                ? $"{Name} — {ProductCategory} / {PackageSize}"
-                : $"{CompanyName} — {Name} ({ProductCategory}, {PackageSize})";
+            IsPlaceholder
+                ? "— اختر الصنف —"
+                : string.IsNullOrWhiteSpace(CompanyName)
+                    ? $"{Name} — {ProductCategory} / {PackageSize}"
+                    : $"{CompanyName} — {Name} ({ProductCategory}, {PackageSize})";
     }
 
     private sealed class MainWarehouseRow

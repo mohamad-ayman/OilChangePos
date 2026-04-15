@@ -107,6 +107,99 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
         return movement.Id;
     }
 
+    public async Task<PurchaseReceiptBatchResult> AddPurchaseReceiptBatchAsync(
+        int userId,
+        int warehouseId,
+        string supplierName,
+        string? receiptMemo,
+        IReadOnlyList<PurchaseReceiptLineInput> lines,
+        CancellationToken cancellationToken = default)
+    {
+        if (lines.Count == 0)
+            throw new InvalidOperationException("أضف سطراً واحداً على الأقل في فاتورة الاستلام.");
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
+            ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        if (actor.Role != UserRole.Admin)
+            throw new InvalidOperationException("المسؤولون فقط يمكنهم تسجيل مشتريات في المستودع الرئيسي.");
+
+        var warehouse = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == warehouseId, cancellationToken)
+            ?? throw new InvalidOperationException("المستودع غير موجود.");
+        if (warehouse.Type != WarehouseType.Main)
+            throw new InvalidOperationException("استلام المشتريات الجماعي مسموح فقط في المستودع الرئيسي.");
+
+        foreach (var line in lines)
+        {
+            if (line.ProductId <= 0)
+                throw new InvalidOperationException("كل سطر يجب أن يحدد صنفاً صالحاً.");
+            if (line.Quantity <= 0)
+                throw new InvalidOperationException("الكمية يجب أن تكون أكبر من صفر في كل السطور.");
+            if (line.UnitPurchasePrice < 0)
+                throw new InvalidOperationException("سعر الشراء لا يمكن أن يكون سالباً.");
+        }
+
+        var productIds = lines.Select(l => l.ProductId).Distinct().ToList();
+        var existingIds = await db.Products.AsNoTracking()
+            .Where(p => productIds.Contains(p.Id))
+            .Select(p => p.Id)
+            .ToListAsync(cancellationToken);
+        if (existingIds.Count != productIds.Count)
+            throw new InvalidOperationException("أحد الأصناف المحددة غير موجود في النظام.");
+
+        var supplierPart = string.IsNullOrWhiteSpace(supplierName) ? "—" : supplierName.Trim();
+        var memoPart = string.IsNullOrWhiteSpace(receiptMemo) ? string.Empty : $" | {receiptMemo.Trim()}";
+        var headerNote = $"مورد: {supplierPart}{memoPart} | استلام جماعي";
+
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var purchases = new List<Purchase>();
+            foreach (var line in lines)
+            {
+                var lineMemo = string.IsNullOrWhiteSpace(line.LineNote) ? string.Empty : $" | {line.LineNote.Trim()}";
+                var purchase = new Purchase
+                {
+                    ProductId = line.ProductId,
+                    Quantity = line.Quantity,
+                    PurchasePrice = line.UnitPurchasePrice,
+                    ProductionDate = line.ProductionDate.Date,
+                    PurchaseDate = line.PurchaseDate.Date,
+                    WarehouseId = warehouseId,
+                    CreatedByUserId = userId,
+                    Notes = headerNote + lineMemo
+                };
+                purchases.Add(purchase);
+                db.Purchases.Add(purchase);
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+
+            foreach (var purchase in purchases)
+            {
+                db.StockMovements.Add(new StockMovement
+                {
+                    ProductId = purchase.ProductId,
+                    MovementType = StockMovementType.Purchase,
+                    Quantity = purchase.Quantity,
+                    ToWarehouseId = warehouseId,
+                    ReferenceId = purchase.Id,
+                    Notes = $"شراء: {purchase.Notes}"
+                });
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+
+            return new PurchaseReceiptBatchResult(purchases.Count, purchases.ConvertAll(p => p.Id));
+        }
+        catch
+        {
+            await tx.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
     public async Task<StockAuditResultDto> RunStockAuditAsync(int userId, int warehouseId, List<AuditLineRequest> lines, string notes, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

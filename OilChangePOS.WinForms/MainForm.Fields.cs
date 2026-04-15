@@ -211,6 +211,46 @@ public partial class MainForm : Form
     private Label? _mwHeaderUserLabel;
     private Label? _mwAvailableStockLabel;
     private TabPage? _mainWarehouseTabPage;
+    private TabPage? _bulkPurchaseTabPage;
+    /// <summary>Catalog rows plus a placeholder (Id=0) for the bulk purchase line grid combo.</summary>
+    private List<MainWarehouseCatalogRow> _bulkPurchaseProductComboDataSource = [];
+    private readonly TextBox _bulkPurchaseSupplierEdit = new()
+    {
+        Width = 280,
+        RightToLeft = RightToLeft.Yes,
+        PlaceholderText = "مثال: شركة الديب"
+    };
+    private readonly TextBox _bulkPurchaseMemoEdit = new()
+    {
+        Width = 420,
+        RightToLeft = RightToLeft.Yes,
+        PlaceholderText = "رقم فاتورة المورد، ملاحظات عامة (اختياري)"
+    };
+    private readonly DataGridView _bulkPurchaseLinesGrid = new()
+    {
+        Dock = DockStyle.Fill,
+        AutoGenerateColumns = false,
+        AllowUserToAddRows = false,
+        RowHeadersVisible = false,
+        MultiSelect = false,
+        SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+        BackgroundColor = Color.White,
+        BorderStyle = BorderStyle.None,
+        RightToLeft = RightToLeft.Yes
+    };
+    private readonly BindingSource _bulkPurchaseBinding = new();
+    private readonly Label _bulkPurchaseHintLabel = new()
+    {
+        AutoSize = false,
+        Dock = DockStyle.Top,
+        Height = 44,
+        ForeColor = UiTextSecondary,
+        TextAlign = ContentAlignment.TopRight,
+        Padding = new Padding(12, 0, 12, 8),
+        RightToLeft = RightToLeft.Yes,
+        Font = UiFont,
+        UseCompatibleTextRendering = false
+    };
     private Button _mwCmdAdd = null!;
     private Button _mwCmdUpdate = null!;
     private Button _mwCmdDelete = null!;
