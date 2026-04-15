@@ -405,20 +405,28 @@ public partial class MainForm
     private static void ApplyInitialSplitterDistance(SplitContainer split, int preferredDistance, int panel1MinSize, int panel2MinSize)
     {
         const int safeMin = 25;
-        split.Panel1MinSize = safeMin;
-        split.Panel2MinSize = safeMin;
 
         void OnSized(object? sender, EventArgs e)
         {
+            // Relax mins before every attempt so SplitterDistance is always legal for the current client width.
+            split.Panel1MinSize = safeMin;
+            split.Panel2MinSize = safeMin;
+
             var along = split.Orientation == Orientation.Horizontal ? split.ClientSize.Height : split.ClientSize.Width;
+            if (along <= split.SplitterWidth)
+                return;
+
             var usable = along - split.SplitterWidth;
             if (usable < panel1MinSize + panel2MinSize)
                 return;
 
+            // Panel1 width == SplitterDistance (vertical). Need dist >= panel1MinSize and (along - SplitterWidth - dist) >= panel2MinSize.
+            var minDist = panel1MinSize;
             var maxDist = usable - panel2MinSize;
-            var lo = Math.Min(panel1MinSize, maxDist);
-            var hi = Math.Max(panel1MinSize, maxDist);
-            var dist = Math.Clamp(preferredDistance, lo, hi);
+            if (minDist > maxDist)
+                return;
+
+            var dist = Math.Clamp(preferredDistance, minDist, maxDist);
 
             try
             {
@@ -428,12 +436,16 @@ public partial class MainForm
             }
             catch (InvalidOperationException)
             {
+                split.Panel1MinSize = safeMin;
+                split.Panel2MinSize = safeMin;
                 return;
             }
 
             split.SizeChanged -= OnSized;
         }
 
+        split.Panel1MinSize = safeMin;
+        split.Panel2MinSize = safeMin;
         split.SizeChanged += OnSized;
         OnSized(split, EventArgs.Empty);
     }
