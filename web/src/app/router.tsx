@@ -22,6 +22,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { CatalogPage } from '@/features/catalog/pages/CatalogPage'
 import { AdminUsersPage } from '@/features/admin/pages/AdminUsersPage'
+import { StockRequestsPage } from '@/features/stock-requests/pages/StockRequestsPage'
 
 const router = createBrowserRouter([
   {
@@ -39,6 +40,7 @@ const router = createBrowserRouter([
               { index: true, element: <ShellDashboardPage /> },
               { path: 'pos', element: <POSPage /> },
               { path: 'stock-balances', element: <InventoryPage /> },
+              { path: 'stock-requests', element: <StockRequestsPage /> },
               { path: 'reports', element: <ReportsDashboardPage /> },
               {
                 element: <RequireRole allowedRoles={['admin']} />,

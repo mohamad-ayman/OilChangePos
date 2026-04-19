@@ -30,12 +30,12 @@ export const TransferReport = memo(function TransferReport({ stats, loading }: T
   )
 
   return (
-    <section className="border border-slate-200 bg-white">
-      <header className="border-b border-slate-200 bg-slate-100 px-3 py-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-700">{t('rep.transfer.title')}</h2>
-        <p className="text-[10px] text-slate-500">{t('rep.transfer.subtitle')}</p>
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <header className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+        <h2 className="text-sm font-semibold text-slate-900">{t('rep.transfer.title')}</h2>
+        <p className="mt-0.5 text-xs text-slate-600">{t('rep.transfer.subtitle')}</p>
       </header>
-      <div className="grid gap-3 p-3 lg:grid-cols-2">
+      <div className="grid gap-4 p-4 lg:grid-cols-2">
         <div>
           <h3 className="text-[10px] font-semibold uppercase text-slate-500">{t('rep.transfer.pipeline')}</h3>
           <div className="mt-2 h-36">

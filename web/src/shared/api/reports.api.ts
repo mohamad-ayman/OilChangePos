@@ -202,9 +202,9 @@ function mockTopProducts(): TopProductsResult {
   return {
     periodLabel: 'Last 30 days',
     items: [
-      { rank: 1, productId: 1, name: 'Mock Oil 4L', qtySold: 420, revenue: 42000 },
-      { rank: 2, productId: 2, name: 'Mock Filter', qtySold: 310, revenue: 12400 },
-      { rank: 3, productId: 3, name: 'Brake fluid 1L', qtySold: 95, revenue: 2850 },
+      { rank: 1, productId: 1, name: 'Mobil — 5W-30 4L', qtySold: 420, revenue: 42000 },
+      { rank: 2, productId: 2, name: 'Mann — Oil filter', qtySold: 310, revenue: 12400 },
+      { rank: 3, productId: 3, name: 'Castrol — Brake fluid 1L', qtySold: 95, revenue: 2850 },
     ],
   }
 }
@@ -341,32 +341,26 @@ async function fetchSalesSummaryLive(access: ReportsAccess): Promise<SalesSummar
           .then((r) => {
             const sales = Number(r.data.totalSales ?? 0)
             const invoices = Number(r.data.invoiceCount ?? 0)
-            const profit = Math.round(sales * 0.18)
             return {
               date: toLocalDateString(d),
               sales,
-              profit,
+              profit: 0,
               invoices,
             } satisfies SalesDailyPoint
           })
       }),
     )
 
-    const [periodRes, profitRes] = await Promise.all([
-      http.get<SalesPeriodSummaryDto>('/api/Reports/sales-period-summary', {
-        params: { fromLocalDate: fromStr, toLocalDate: toStr, warehouseId: whId },
-      }),
-      http.get<ProfitRollupDto>('/api/Reports/profit-rollup', {
-        params: { fromLocalDate: fromStr, toLocalDate: toStr, warehouseId: whId },
-      }),
-    ])
+    const { data: period } = await http.get<SalesPeriodSummaryDto>('/api/Reports/sales-period-summary', {
+      params: { fromLocalDate: fromStr, toLocalDate: toStr, warehouseId: whId },
+    })
 
     const monthlyMap = new Map<string, { sales: number; profit: number; invoices: number }>()
     for (const p of dailyRows) {
       const month = p.date.slice(0, 7)
       const cur = monthlyMap.get(month) ?? { sales: 0, profit: 0, invoices: 0 }
       cur.sales += p.sales
-      cur.profit += p.profit
+      cur.profit += 0
       cur.invoices += p.invoices
       monthlyMap.set(month, cur)
     }
@@ -374,17 +368,14 @@ async function fetchSalesSummaryLive(access: ReportsAccess): Promise<SalesSummar
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([month, v]) => ({ month, ...v }))
 
-    const period = periodRes.data
-    const profit = profitRes.data
     const totalSales = Number(period.netSales ?? 0)
-    const totalProfit = Number(profit.totalEstimatedGrossProfit ?? 0)
     const transactionCount = Number(period.invoiceCount ?? 0)
     const avgOrderValue =
       transactionCount > 0 ? Math.round((totalSales / transactionCount) * 100) / 100 : Number(period.averageInvoiceValue ?? 0)
 
     return {
       totalSales,
-      totalProfit,
+      totalProfit: 0,
       transactionCount,
       avgOrderValue,
       daily: dailyRows,

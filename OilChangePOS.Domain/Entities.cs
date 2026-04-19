@@ -23,6 +23,15 @@ public enum UserRole
     Cashier = 3
 }
 
+/// <summary>Branch asks main warehouse for stock; admin fulfills with a transfer.</summary>
+public enum BranchStockRequestStatus
+{
+    Pending = 0,
+    Rejected = 1,
+    Fulfilled = 2,
+    Cancelled = 3,
+}
+
 public class Company
 {
     public int Id { get; set; }
@@ -232,6 +241,27 @@ public class AppUser
     /// <summary>When <see cref="Role"/> is <see cref="UserRole.Manager"/> or <see cref="UserRole.Cashier"/>, POS/inventory default to this active branch warehouse; if null, first branch by name is used.</summary>
     public int? HomeBranchWarehouseId { get; set; }
     public Warehouse? HomeBranchWarehouse { get; set; }
+}
+
+public class BranchStockRequest
+{
+    public int Id { get; set; }
+    public int BranchWarehouseId { get; set; }
+    public Warehouse BranchWarehouse { get; set; } = null!;
+    public int ProductId { get; set; }
+    public Product Product { get; set; } = null!;
+    public decimal Quantity { get; set; }
+    public string Notes { get; set; } = string.Empty;
+    public BranchStockRequestStatus Status { get; set; } = BranchStockRequestStatus.Pending;
+    public int RequestedByUserId { get; set; }
+    public AppUser RequestedByUser { get; set; } = null!;
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    public int? ResolvedByUserId { get; set; }
+    public AppUser? ResolvedByUser { get; set; }
+    public DateTime? ResolvedAtUtc { get; set; }
+    public string? ResolutionNotes { get; set; }
+    /// <summary>First stock movement id when fulfilled (main→branch transfer may split into multiple rows).</summary>
+    public int? FulfillmentStockMovementId { get; set; }
 }
 
 /// <summary>Manual operating expenses (rent, utilities, etc.) for cash-flow reporting — not COGS.</summary>

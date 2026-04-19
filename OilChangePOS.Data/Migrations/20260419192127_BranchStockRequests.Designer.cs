@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OilChangePOS.Data;
 
@@ -11,9 +12,10 @@ using OilChangePOS.Data;
 namespace OilChangePOS.Data.Migrations
 {
     [DbContext(typeof(OilChangePosDbContext))]
-    partial class OilChangePosDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260419192127_BranchStockRequests")]
+    partial class BranchStockRequests
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1028,3 +1030,4 @@ namespace OilChangePOS.Data.Migrations
         }
     }
 }
+

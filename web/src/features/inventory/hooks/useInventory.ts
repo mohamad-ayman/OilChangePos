@@ -160,8 +160,22 @@ export function useInventory() {
               return `${whName(w)}: ${byWarehouse[w]?.qty ?? 0}`
             })()
 
-      const costUnitApprox =
-        totalQty > 0 && totalValue > 0 ? Math.round((totalValue / totalQty) * 10000) / 10000 : null
+      /**
+       * API snapshot `unitPrice` / `stockValue` use effective **retail** unit (catalog + branch override),
+       * same as `GetEffectiveSalePriceAsync` — not landed COGS. Weighted sale = Σ value / Σ qty.
+       */
+      const saleUnitPrice = (() => {
+        if (totalQty > 0 && totalValue > 0) {
+          return Math.round((totalValue / totalQty) * 10000) / 10000
+        }
+        for (const wid of warehouseIdsForScope) {
+          const line = (snapshotsByWarehouseId.get(wid) ?? []).find((x) => x.productId === p.id)
+          if (line != null) return line.unitPrice ?? p.unitPrice
+        }
+        return p.unitPrice
+      })()
+
+      const costUnitApprox = null
 
       return {
         productId: p.id,
@@ -170,7 +184,7 @@ export function useInventory() {
         category: p.productCategory,
         packageSize: p.packageSize,
         companyName: p.companyName,
-        saleUnitPrice: p.unitPrice,
+        saleUnitPrice,
         costUnitApprox,
         totalQty,
         breakdown,

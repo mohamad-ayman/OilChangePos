@@ -146,6 +146,19 @@ public sealed class ReportsController(IReportService reports) : ControllerBase
         CancellationToken ct) =>
         Ok(await reports.GetTransfersReportAsync(fromLocalDate, toLocalDate, fromWarehouseId, toWarehouseId, ct));
 
+    /// <summary>Stock transfers involving this warehouse (in or out). Branch staff: home warehouse only.</summary>
+    [HttpGet("branch-transfers")]
+    public async Task<IActionResult> BranchTransfers(
+        [FromQuery] DateTime fromLocalDate,
+        [FromQuery] DateTime toLocalDate,
+        [FromQuery] int warehouseId,
+        CancellationToken ct)
+    {
+        var deny = this.EnsureAdminOrHomeWarehouse(warehouseId);
+        if (deny is not null) return deny;
+        return Ok(await reports.GetBranchTransferLedgerAsync(fromLocalDate, toLocalDate, warehouseId, ct));
+    }
+
     [HttpGet("top-selling")]
     public async Task<IActionResult> TopSelling(
         [FromQuery] DateTime fromLocalDate,

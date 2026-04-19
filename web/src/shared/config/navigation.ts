@@ -100,6 +100,13 @@ export const navigationSections: NavSection[] = [
         icon: 'placeholder',
         allowedRoles: ['admin', 'manager'],
       },
+      {
+        id: 'stock-requests',
+        labelKey: 'nav.stockRequests',
+        path: '/app/stock-requests',
+        icon: 'placeholder',
+        allowedRoles: ['admin', 'manager', 'cashier'],
+      },
       { id: 'products', labelKey: 'nav.products', path: '/app/products', icon: 'placeholder', allowedRoles: ['admin'] },
 
       { id: 'transfers', labelKey: 'nav.transfers', path: '/app/transfers', icon: 'placeholder', allowedRoles: ['admin'] },

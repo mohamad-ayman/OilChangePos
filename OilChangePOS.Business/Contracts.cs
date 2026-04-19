@@ -58,6 +58,38 @@ public interface ITransferService
     Task<int> TransferStockAsync(TransferStockRequest request, CancellationToken cancellationToken = default);
 }
 
+public record CreateBranchStockRequestDto(int ProductId, decimal Quantity, string? Notes);
+
+public record BranchStockRequestRowDto(
+    int Id,
+    int BranchWarehouseId,
+    string BranchWarehouseName,
+    int ProductId,
+    string ProductDisplayName,
+    decimal Quantity,
+    string Notes,
+    string Status,
+    int RequestedByUserId,
+    string RequestedByUsername,
+    DateTime CreatedAtUtc,
+    int? ResolvedByUserId,
+    string? ResolvedByUsername,
+    DateTime? ResolvedAtUtc,
+    string? ResolutionNotes,
+    int? FulfillmentStockMovementId);
+
+public interface IBranchStockRequestService
+{
+    Task<int> CreateForHomeBranchAsync(int userId, CreateBranchStockRequestDto dto, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BranchStockRequestRowDto>> ListAsync(
+        int userId,
+        int? branchWarehouseIdFilter,
+        CancellationToken cancellationToken = default);
+    Task RejectAsync(int adminUserId, int requestId, string? notes, CancellationToken cancellationToken = default);
+    Task FulfillAsync(int adminUserId, int requestId, CancellationToken cancellationToken = default);
+    Task CancelOwnPendingAsync(int userId, int requestId, CancellationToken cancellationToken = default);
+}
+
 public interface ISalesService
 {
     Task<int> CompleteSaleAsync(CompleteSaleRequest request, CancellationToken cancellationToken = default);
@@ -102,6 +134,13 @@ public interface IReportService
     Task<List<StockMovementHistoryRowDto>> GetStockMovementHistoryAsync(int productId, DateTime fromLocalDate, DateTime toLocalDate, int? warehouseId, CancellationToken cancellationToken = default);
 
     Task<List<TransferLedgerRowDto>> GetTransfersReportAsync(DateTime fromLocalDate, DateTime toLocalDate, int? fromWarehouseId, int? toWarehouseId, CancellationToken cancellationToken = default);
+
+    /// <summary>Transfers where <paramref name="warehouseId"/> is source or destination (فرع: وارد/صادر).</summary>
+    Task<List<TransferLedgerRowDto>> GetBranchTransferLedgerAsync(
+        DateTime fromLocalDate,
+        DateTime toLocalDate,
+        int warehouseId,
+        CancellationToken cancellationToken = default);
 
     Task<List<TopSellingProductDto>> GetTopSellingProductsAsync(DateTime fromLocalDate, DateTime toLocalDate, int? warehouseId, int take, CancellationToken cancellationToken = default);
     Task<List<SlowMovingProductDto>> GetSlowMovingProductsAsync(DateTime fromLocalDate, DateTime toLocalDate, int warehouseId, int take, CancellationToken cancellationToken = default);

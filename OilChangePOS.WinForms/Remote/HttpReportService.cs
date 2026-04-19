@@ -88,6 +88,18 @@ internal sealed class HttpReportService(HttpClient http) : IReportService
         return await ApiHttp.ReadFromJsonAsync<List<TransferLedgerRowDto>>(res, cancellationToken);
     }
 
+    public async Task<List<TransferLedgerRowDto>> GetBranchTransferLedgerAsync(
+        DateTime fromLocalDate,
+        DateTime toLocalDate,
+        int warehouseId,
+        CancellationToken cancellationToken = default)
+    {
+        using var res = await http.GetAsync(
+            $"api/Reports/branch-transfers?fromLocalDate={L(fromLocalDate)}&toLocalDate={L(toLocalDate)}&warehouseId={warehouseId}",
+            cancellationToken);
+        return await ApiHttp.ReadFromJsonAsync<List<TransferLedgerRowDto>>(res, cancellationToken);
+    }
+
     public async Task<List<TopSellingProductDto>> GetTopSellingProductsAsync(DateTime fromLocalDate, DateTime toLocalDate, int? warehouseId, int take, CancellationToken cancellationToken = default)
     {
         var wh = warehouseId is { } w ? $"&warehouseId={w}" : string.Empty;

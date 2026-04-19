@@ -88,6 +88,7 @@ builder.Services.AddDbContextFactory<OilChangePosDbContext>(options =>
 
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<ITransferService, TransferService>();
+builder.Services.AddScoped<IBranchStockRequestService, BranchStockRequestService>();
 builder.Services.AddScoped<ISalesService, SalesService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IExpenseService, ExpenseService>();

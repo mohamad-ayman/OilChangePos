@@ -21,6 +21,7 @@ public class OilChangePosDbContext(DbContextOptions<OilChangePosDbContext> optio
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<Expense> Expenses => Set<Expense>();
     public DbSet<BranchProductPrice> BranchProductPrices => Set<BranchProductPrice>();
+    public DbSet<BranchStockRequest> BranchStockRequests => Set<BranchStockRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -182,6 +183,19 @@ public class OilChangePosDbContext(DbContextOptions<OilChangePosDbContext> optio
             b.HasIndex(x => x.Username).IsUnique();
             b.HasOne(x => x.HomeBranchWarehouse).WithMany().HasForeignKey(x => x.HomeBranchWarehouseId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<BranchStockRequest>(b =>
+        {
+            b.Property(x => x.Quantity).HasPrecision(18, 3);
+            b.Property(x => x.Notes).HasMaxLength(500).IsRequired();
+            b.Property(x => x.ResolutionNotes).HasMaxLength(500);
+            b.HasIndex(x => new { x.BranchWarehouseId, x.Status });
+            b.HasIndex(x => x.CreatedAtUtc);
+            b.HasOne(x => x.BranchWarehouse).WithMany().HasForeignKey(x => x.BranchWarehouseId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.RequestedByUser).WithMany().HasForeignKey(x => x.RequestedByUserId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.ResolvedByUser).WithMany().HasForeignKey(x => x.ResolvedByUserId).OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

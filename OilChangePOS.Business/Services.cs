@@ -22,6 +22,18 @@ internal static class BranchSalePricing
         overrides.TryGetValue(productId, out var o) ? o : catalogUnitPrice;
 }
 
+internal static class ProductDisplayNames
+{
+    /// <summary>POS/catalog style: <c>شركة — اسم الصنف</c> (e.g. Mobil — 5w30). Omits company segment when missing.</summary>
+    internal static string CatalogLine(string? companyName, string productName)
+    {
+        var pn = (productName ?? string.Empty).Trim();
+        if (pn.Length == 0) return "—";
+        var cn = string.IsNullOrWhiteSpace(companyName) ? null : companyName.Trim();
+        return cn is null or "" ? pn : $"{cn} — {pn}";
+    }
+}
+
 internal static class WarehouseStock
 {
     internal static async Task<decimal> GetOnHandAsync(OilChangePosDbContext db, int productId, int warehouseId, CancellationToken cancellationToken = default)
@@ -701,6 +713,22 @@ public class CustomerService(IDbContextFactory<OilChangePosDbContext> dbFactory)
 
 public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, IInventoryService inventoryService) : IReportService
 {
+    private static async Task<Dictionary<int, string>> LoadProductCatalogDisplayLinesAsync(
+        OilChangePosDbContext db, IEnumerable<int> productIds, CancellationToken cancellationToken)
+    {
+        var ids = productIds.Distinct().ToList();
+        if (ids.Count == 0)
+            return [];
+        var rows = await (
+            from p in db.Products.AsNoTracking()
+            where ids.Contains(p.Id)
+            join c in db.Companies.AsNoTracking() on p.CompanyId equals c.Id into cj
+            from c in cj.DefaultIfEmpty()
+            select new { p.Id, p.Name, CompanyName = c != null ? c.Name : (string?)null }
+        ).ToListAsync(cancellationToken);
+        return rows.ToDictionary(x => x.Id, x => ProductDisplayNames.CatalogLine(x.CompanyName, x.Name));
+    }
+
     public async Task<DailySalesDto> GetDailySalesReportAsync(DateTime dateUtc, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -764,9 +792,9 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
             .Take(10)
             .ToListAsync(cancellationToken);
 
-        var productLookup = await db.Products.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
+        var displayByProduct = await LoadProductCatalogDisplayLinesAsync(db, topProducts.Select(x => x.ProductId), cancellationToken);
         var topDtos = topProducts
-            .Select(x => new TopSellingProductDto(productLookup.GetValueOrDefault(x.ProductId, $"Product #{x.ProductId}"), x.Quantity, x.Amount))
+            .Select(x => new TopSellingProductDto(displayByProduct.GetValueOrDefault(x.ProductId, $"Product #{x.ProductId}"), x.Quantity, x.Amount))
             .ToList();
 
         var inventory = await GetInventorySnapshotCoreAsync(db, warehouseId, cancellationToken);
@@ -826,11 +854,12 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
             .Take(250)
             .ToListAsync(cancellationToken);
 
+        var transferDisplay = await LoadProductCatalogDisplayLinesAsync(db, transfers.Select(m => m.ProductId), cancellationToken);
         var transferDtos = transfers.Select(m =>
         {
             var fromName = m.FromWarehouseId is int f ? whNames.GetValueOrDefault(f, "?") : "—";
             var toName = m.ToWarehouseId is int t ? whNames.GetValueOrDefault(t, "?") : "—";
-            var pname = m.Product?.Name ?? productLookup.GetValueOrDefault(m.ProductId, $"#{m.ProductId}");
+            var pname = transferDisplay.GetValueOrDefault(m.ProductId, m.Product?.Name ?? $"#{m.ProductId}");
             return new TransferLedgerRowDto(m.MovementDateUtc, pname, m.Quantity, fromName, toName, m.Notes);
         }).ToList();
 
@@ -1106,13 +1135,41 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
 
         var transfers = await q.OrderByDescending(x => x.MovementDateUtc).Take(5000).ToListAsync(cancellationToken);
         var whNames = await db.Warehouses.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
-        var productLookup = await db.Products.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
+        var displayByProduct = await LoadProductCatalogDisplayLinesAsync(db, transfers.Select(m => m.ProductId), cancellationToken);
 
         return transfers.Select(m =>
         {
             var fn = m.FromWarehouseId is int f ? whNames.GetValueOrDefault(f, "—") : "—";
             var tn = m.ToWarehouseId is int t ? whNames.GetValueOrDefault(t, "—") : "—";
-            var pname = m.Product?.Name ?? productLookup.GetValueOrDefault(m.ProductId, $"#{m.ProductId}");
+            var pname = displayByProduct.GetValueOrDefault(m.ProductId, m.Product?.Name ?? $"#{m.ProductId}");
+            return new TransferLedgerRowDto(m.MovementDateUtc, pname, m.Quantity, fn, tn, m.Notes);
+        }).ToList();
+    }
+
+    public async Task<List<TransferLedgerRowDto>> GetBranchTransferLedgerAsync(
+        DateTime fromLocalDate,
+        DateTime toLocalDate,
+        int warehouseId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var (fromUtc, toUtcEx) = LocalDateRangeToUtcExclusive(fromLocalDate, toLocalDate);
+        var transfers = await db.StockMovements.AsNoTracking()
+            .Include(x => x.Product)
+            .Where(x => x.MovementType == StockMovementType.Transfer
+                        && x.MovementDateUtc >= fromUtc
+                        && x.MovementDateUtc < toUtcEx
+                        && (x.FromWarehouseId == warehouseId || x.ToWarehouseId == warehouseId))
+            .OrderByDescending(x => x.MovementDateUtc)
+            .Take(2000)
+            .ToListAsync(cancellationToken);
+        var whNames = await db.Warehouses.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
+        var displayByProduct = await LoadProductCatalogDisplayLinesAsync(db, transfers.Select(m => m.ProductId), cancellationToken);
+        return transfers.Select(m =>
+        {
+            var fn = m.FromWarehouseId is int f ? whNames.GetValueOrDefault(f, "—") : "—";
+            var tn = m.ToWarehouseId is int t ? whNames.GetValueOrDefault(t, "—") : "—";
+            var pname = displayByProduct.GetValueOrDefault(m.ProductId, m.Product?.Name ?? $"#{m.ProductId}");
             return new TransferLedgerRowDto(m.MovementDateUtc, pname, m.Quantity, fn, tn, m.Notes);
         }).ToList();
     }
@@ -1145,8 +1202,8 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
             .Take(Math.Clamp(take, 1, 500))
             .ToListAsync(cancellationToken);
 
-        var names = await db.Products.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
-        return top.Select(x => new TopSellingProductDto(names.GetValueOrDefault(x.ProductId, $"#{x.ProductId}"), x.Quantity, x.Amount)).ToList();
+        var displayByProduct = await LoadProductCatalogDisplayLinesAsync(db, top.Select(x => x.ProductId), cancellationToken);
+        return top.Select(x => new TopSellingProductDto(displayByProduct.GetValueOrDefault(x.ProductId, $"#{x.ProductId}"), x.Quantity, x.Amount)).ToList();
     }
 
     public async Task<List<SlowMovingProductDto>> GetSlowMovingProductsAsync(DateTime fromLocalDate, DateTime toLocalDate, int warehouseId, int take, CancellationToken cancellationToken = default)
@@ -1280,6 +1337,8 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
             from ii in db.InvoiceItems.AsNoTracking()
             join inv in invQ on ii.InvoiceId equals inv.Id
             join pr in db.Products.AsNoTracking() on ii.ProductId equals pr.Id
+            join co in db.Companies.AsNoTracking() on pr.CompanyId equals co.Id into coJoin
+            from co in coJoin.DefaultIfEmpty()
             join usr in db.Users.AsNoTracking() on inv.CreatedByUserId equals usr.Id
             join cust in db.Customers.AsNoTracking() on inv.CustomerId equals cust.Id into custJoin
             from cust in custJoin.DefaultIfEmpty()
@@ -1290,7 +1349,7 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
                 whName,
                 cust == null ? "زبون عابر / بدون سجل" : cust.FullName,
                 usr.Username,
-                pr.Name,
+                (co == null || co.Name == null || co.Name == "") ? pr.Name : co.Name + " — " + pr.Name,
                 ii.Quantity,
                 ii.UnitPrice,
                 ii.LineTotal,
