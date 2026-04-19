@@ -2,11 +2,11 @@ import { memo, useDeferredValue, useMemo, useState } from 'react'
 import type { Warehouse } from '@/entities/warehouse'
 import type { POSProductRow } from '@/shared/api/pos.api'
 import { normalizePosQty } from '@/features/pos/engine/posEngine'
+import { catalogDisplayName } from '@/shared/utils/catalogLine'
 import { t } from '@/i18n'
 
 function displayTitle(p: POSProductRow): string {
-  const c = p.companyName?.trim() ?? ''
-  return c ? `${c} — ${p.name}` : p.name
+  return catalogDisplayName({ companyName: p.companyName, name: p.name, packageSize: p.packageSize })
 }
 
 function initials(p: POSProductRow): string {
@@ -139,14 +139,18 @@ export const POSProductPanel = memo(function POSProductPanel({
     }
     const q = deferred.toLowerCase()
     if (!q) return rows
-    return rows.filter(
-      (p) =>
+    return rows.filter((p) => {
+      const label = displayTitle(p).toLowerCase()
+      return (
+        label.includes(q) ||
         p.name.toLowerCase().includes(q) ||
         (p.companyName || '').toLowerCase().includes(q) ||
+        (p.packageSize || '').toLowerCase().includes(q) ||
         p.barcode.includes(deferred) ||
         String(p.id).includes(deferred) ||
-        p.productCategory.toLowerCase().includes(q),
-    )
+        p.productCategory.toLowerCase().includes(q)
+      )
+    })
   }, [inStock, category, deferred])
 
   return (

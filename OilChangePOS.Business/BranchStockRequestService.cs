@@ -155,7 +155,7 @@ public sealed class BranchStockRequestService(
     private static BranchStockRequestRowDto MapRow(BranchStockRequest x)
     {
         var company = x.Product.Company?.Name;
-        var display = ProductDisplayNames.CatalogLine(company, x.Product.Name);
+        var display = ProductDisplayNames.CatalogDisplayName(company, x.Product.Name, x.Product.PackageSize);
         return new BranchStockRequestRowDto(
             x.Id,
             x.BranchWarehouseId,

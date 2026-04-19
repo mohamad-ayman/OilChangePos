@@ -16,6 +16,7 @@ import {
   getWarehouses,
   type CreateTransferWorkflowInput,
 } from '@/shared/api/inventory.api'
+import { catalogDisplayName } from '@/shared/utils/catalogLine'
 import { useAuthStore } from '@/shared/store/auth.store'
 import { WarehouseType, type Warehouse } from '@/entities/warehouse'
 
@@ -121,12 +122,21 @@ export function useCreateTransferWizard() {
     const all = productsQuery.data ?? []
     if (!q) return all.slice(0, 40)
     return all
-      .filter(
-        (p) =>
+      .filter((p) => {
+        const label = catalogDisplayName({
+          companyName: p.companyName,
+          name: p.name,
+          packageSize: p.packageSize,
+        }).toLowerCase()
+        return (
+          label.includes(q) ||
           p.name.toLowerCase().includes(q) ||
+          (p.companyName || '').toLowerCase().includes(q) ||
+          (p.packageSize || '').toLowerCase().includes(q) ||
           p.productCategory.toLowerCase().includes(q) ||
-          String(p.id).includes(q),
-      )
+          String(p.id).includes(q)
+        )
+      })
       .slice(0, 40)
   }, [productsQuery.data, productSearch])
 

@@ -10,6 +10,7 @@ import {
   getWarehouses,
   type InventorySnapshotView,
 } from '@/shared/api/inventory.api'
+import { catalogDisplayName } from '@/shared/utils/catalogLine'
 import { useAuthStore } from '@/shared/store/auth.store'
 
 export type WarehouseScope = 'all' | number
@@ -213,7 +214,12 @@ export function useInventory() {
     return baseRows.filter((r) => {
       if (category !== 'all' && r.category !== category) return false
       if (!deferredSearch) return true
-      const hay = `${r.name} ${r.sku} ${r.category} ${r.companyName}`.toLowerCase()
+      const label = catalogDisplayName({
+        companyName: r.companyName,
+        name: r.name,
+        packageSize: r.packageSize,
+      })
+      const hay = `${label} ${r.name} ${r.sku} ${r.category} ${r.companyName} ${r.packageSize}`.toLowerCase()
       return hay.includes(deferredSearch)
     })
   }, [baseRows, category, deferredSearch])
@@ -225,7 +231,17 @@ export function useInventory() {
       const cmp = (() => {
         switch (col) {
           case 'name':
-            return a.name.localeCompare(b.name)
+            return catalogDisplayName({
+              companyName: a.companyName,
+              name: a.name,
+              packageSize: a.packageSize,
+            }).localeCompare(
+              catalogDisplayName({
+                companyName: b.companyName,
+                name: b.name,
+                packageSize: b.packageSize,
+              }),
+            )
           case 'sku':
             return a.sku.localeCompare(b.sku)
           case 'category':

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { type ChangeEventHandler, useCallback, useMemo, useRef, useState } from 'react'
+import { Fragment, type ChangeEventHandler, useCallback, useMemo, useRef, useState } from 'react'
 import { WarehouseType } from '@/entities/warehouse'
 import {
   createStockMovement,
@@ -17,6 +17,8 @@ import {
   type MainWarehouseGridRow,
   updateMainWarehousePurchase,
 } from '@/shared/api/mainWarehouse.api'
+import { formatApiError } from '@/shared/utils/formatApiError'
+import { catalogDisplayName } from '@/shared/utils/catalogLine'
 import { useAuthStore } from '@/shared/store/auth.store'
 import { t } from '@/i18n'
 
@@ -44,8 +46,14 @@ function parseLocalDate(s: string): string {
 function displayCaption(c: MainWarehouseCatalogEntry): string {
   if (c.caption) return c.caption
   if (c.isPlaceholder) return t('mw.catalogPlaceholder')
-  if (!c.companyName?.trim()) return `${c.name} — ${c.productCategory} / ${c.packageSize}`
-  return `${c.companyName} — ${c.name} (${c.productCategory}, ${c.packageSize})`
+  const main = catalogDisplayName({
+    companyName: c.companyName,
+    name: c.name,
+    packageSize: c.packageSize,
+  })
+  const cat = c.productCategory?.trim()
+  if (!cat) return main
+  return `${main} (${cat})`
 }
 
 function parseImportLines(text: string): MainWarehouseExcelImportLine[] {
@@ -82,6 +90,72 @@ function parseImportLines(text: string): MainWarehouseExcelImportLine[] {
   return out
 }
 
+type ProductGroup = {
+  productId: number
+  companyName: string
+  inventoryName: string
+  packageSize: string
+  productCategory: string
+  lines: MainWarehouseGridRow[]
+  purchaseLines: MainWarehouseGridRow[]
+  totalPurchasedQty: number
+  weightedAvgPrice: number | null
+  onHandAtMain: number | null
+  lastPurchaseDate: string
+  purchaseCount: number
+}
+
+function buildProductGroups(rows: MainWarehouseGridRow[]): ProductGroup[] {
+  const map = new Map<number, MainWarehouseGridRow[]>()
+  const order: number[] = []
+  for (const r of rows) {
+    if (!map.has(r.productId)) {
+      map.set(r.productId, [])
+      order.push(r.productId)
+    }
+    map.get(r.productId)!.push(r)
+  }
+  const groups = order.map((productId) => {
+    const lines = map.get(productId)!
+    const purchaseLines = lines.filter((l) => l.purchaseId != null)
+    const totalPurchasedQty = lines.reduce((s, l) => s + l.purchasedQuantity, 0)
+    const qtyForAvg = purchaseLines.reduce((s, l) => s + l.purchasedQuantity, 0)
+    const costSum = purchaseLines.reduce((s, l) => s + l.purchasedQuantity * l.purchasePrice, 0)
+    const weightedAvgPrice = qtyForAvg > 0 ? costSum / qtyForAvg : null
+    const onHandAtMain = lines.find((l) => l.onHandAtMain != null)?.onHandAtMain ?? null
+    const lastPurchaseDate = lines.reduce(
+      (max, l) => (l.purchaseDate > max ? l.purchaseDate : max),
+      lines[0]!.purchaseDate,
+    )
+    return {
+      productId,
+      companyName: lines[0]!.companyName,
+      inventoryName: lines[0]!.inventoryName,
+      packageSize: lines[0]!.packageSize,
+      productCategory: lines[0]!.productCategory,
+      lines,
+      purchaseLines,
+      totalPurchasedQty,
+      weightedAvgPrice,
+      onHandAtMain,
+      lastPurchaseDate,
+      purchaseCount: purchaseLines.length,
+    }
+  })
+  groups.sort((a, b) => {
+    const d = b.lastPurchaseDate.localeCompare(a.lastPurchaseDate)
+    if (d !== 0) return d
+    return a.inventoryName.localeCompare(b.inventoryName, undefined, { sensitivity: 'base' })
+  })
+  return groups
+}
+
+function batchSummaryLabel(g: ProductGroup): string {
+  if (g.purchaseCount === 0) return t('mw.groupNoPurchaseLine')
+  if (g.purchaseCount === 1) return t('mw.groupBatchOne')
+  return t('mw.groupBatchSummary').replace('{count}', String(g.purchaseCount))
+}
+
 export function MainWarehousePage() {
   const user = useAuthStore((s) => s.user)
   const qc = useQueryClient()
@@ -98,6 +172,7 @@ export function MainWarehousePage() {
 
   const catalog = catalogQ.data ?? []
   const rows = gridQ.data ?? []
+  const productGroups = useMemo(() => buildProductGroups(rows), [rows])
   const selectableCatalog = useMemo(() => catalog.filter((c) => !c.isPlaceholder), [catalog])
 
   const [catalogProductId, setCatalogProductId] = useState<number | ''>('')
@@ -106,6 +181,7 @@ export function MainWarehousePage() {
   const [productionDate, setProductionDate] = useState(toYmd(new Date()))
   const [purchaseDate, setPurchaseDate] = useState(toYmd(new Date()))
   const [selectedRow, setSelectedRow] = useState<MainWarehouseGridRow | null>(null)
+  const [expandedProductIds, setExpandedProductIds] = useState<Set<number>>(new Set())
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
 
@@ -164,6 +240,7 @@ export function MainWarehousePage() {
     setProductionDate(toYmd(new Date()))
     setPurchaseDate(toYmd(new Date()))
     setSelectedRow(null)
+    setExpandedProductIds(new Set())
   }
 
   const loadRow = useCallback(
@@ -174,16 +251,44 @@ export function MainWarehousePage() {
       setPurchasePrice(String(r.purchasePrice))
       setProductionDate(r.productionDate.slice(0, 10))
       setPurchaseDate(r.purchaseDate.slice(0, 10))
+      const sameProduct = rows.filter((x) => x.productId === r.productId).length
+      if (sameProduct > 1) {
+        setExpandedProductIds((prev) => {
+          const n = new Set(prev)
+          n.add(r.productId)
+          return n
+        })
+      }
     },
-    [],
+    [rows],
   )
 
-  const pageRows = useMemo(() => {
+  const pageGroups = useMemo(() => {
     const start = (page - 1) * pageSize
-    return rows.slice(start, start + pageSize)
-  }, [rows, page, pageSize])
+    return productGroups.slice(start, start + pageSize)
+  }, [productGroups, page, pageSize])
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize))
+  const totalPages = Math.max(1, Math.ceil(productGroups.length / pageSize))
+
+  const toggleProductExpand = useCallback((productId: number) => {
+    setExpandedProductIds((prev) => {
+      const n = new Set(prev)
+      if (n.has(productId)) n.delete(productId)
+      else n.add(productId)
+      return n
+    })
+  }, [])
+
+  const onParentGroupClick = useCallback((g: ProductGroup) => {
+    if (g.lines.length < 2) return
+    toggleProductExpand(g.productId)
+    setCatalogProductId(g.productId)
+    setSelectedRow(null)
+    setQuantity('')
+    setPurchasePrice('')
+    setProductionDate(toYmd(new Date()))
+    setPurchaseDate(toYmd(new Date()))
+  }, [toggleProductExpand])
 
   const rowKey = (r: MainWarehouseGridRow) =>
     `${r.productId}|${r.purchaseId ?? 'np'}|${r.batchNumber}|${r.purchaseDate}|${r.productionDate}|${r.purchasedQuantity}`
@@ -242,15 +347,13 @@ export function MainWarehousePage() {
 
   const exportCsv = () => {
     const headers = [
-      t('mw.col.company'),
+      t('mw.col.companyProduct'),
       t('mw.col.batch'),
-      t('mw.col.product'),
       t('mw.col.production'),
       t('mw.col.purchasedQty'),
       t('mw.col.remaining'),
       t('mw.col.price'),
       t('mw.col.purchaseDate'),
-      t('mw.col.package'),
       t('mw.col.category'),
     ]
     const esc = (v: string | number | null | undefined) => {
@@ -260,15 +363,17 @@ export function MainWarehousePage() {
     }
     const body = rows.map((r) =>
       [
-        r.companyName,
+        catalogDisplayName({
+          companyName: r.companyName,
+          name: r.inventoryName,
+          packageSize: r.packageSize,
+        }),
         r.batchLabel,
-        r.inventoryName,
         r.productionDate.slice(0, 10),
         r.purchasedQuantity,
         r.onHandAtMain ?? '',
         r.purchasePrice,
         r.purchaseDate.slice(0, 10),
-        r.packageSize,
         r.productCategory,
       ]
         .map(esc)
@@ -304,6 +409,11 @@ export function MainWarehousePage() {
 
   const busy = addMut.isPending || updateMut.isPending || deleteMut.isPending || importMut.isPending
 
+  const mutationErrorText = useMemo(() => {
+    const err = addMut.error ?? updateMut.error ?? deleteMut.error ?? importMut.error
+    return err ? formatApiError(err) : null
+  }, [addMut.error, updateMut.error, deleteMut.error, importMut.error])
+
   if (!mainWh) {
     return (
       <div className="border-b border-slate-200 px-3 py-8 text-center text-sm text-amber-800 sm:px-4">
@@ -320,12 +430,13 @@ export function MainWarehousePage() {
         <div>
           <h1 className="text-base font-semibold text-slate-900">{t('mw.title')}</h1>
           <p className="text-xs text-slate-500">{t('mw.subtitle')}</p>
+          <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-slate-500">{t('mw.gridHint')}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={exportCsv}
-            disabled={!rows.length}
+            disabled={!productGroups.length}
             className="rounded border border-sky-600 bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-700 disabled:opacity-40"
           >
             {t('mw.exportCsv')}
@@ -439,76 +550,175 @@ export function MainWarehousePage() {
             {t('mw.btnClear')}
           </button>
         </div>
-        {(addMut.isError || updateMut.isError || deleteMut.isError || importMut.isError) && (
-          <p className="text-xs text-rose-700">{t('mw.mutationError')}</p>
+        {mutationErrorText && (
+          <p className="whitespace-pre-wrap rounded border border-rose-200 bg-rose-50/90 px-2 py-1.5 text-xs text-rose-900">
+            {mutationErrorText}
+          </p>
         )}
       </section>
 
-      <div className="mt-4 overflow-x-auto border border-slate-200">
-        <table className="w-full min-w-[720px] border-collapse text-start text-xs">
-          <thead className="border-b border-slate-200 bg-slate-100 text-[10px] text-slate-500">
-            <tr>
-              <th className="px-2 py-2">{t('mw.col.company')}</th>
-              <th className="px-2 py-2">{t('mw.col.batch')}</th>
-              <th className="px-2 py-2">{t('mw.col.product')}</th>
-              <th className="px-2 py-2">{t('mw.col.production')}</th>
-              <th className="px-2 py-2 text-end">{t('mw.col.purchasedQty')}</th>
-              <th className="px-2 py-2 text-end">{t('mw.col.remaining')}</th>
-              <th className="px-2 py-2 text-end">{t('mw.col.price')}</th>
-              <th className="px-2 py-2">{t('mw.col.purchaseDate')}</th>
-              <th className="px-2 py-2">{t('mw.col.package')}</th>
-              <th className="px-2 py-2">{t('mw.col.category')}</th>
+      <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="max-h-[min(70vh,560px)] overflow-y-auto overflow-x-auto">
+          <table className="w-full min-w-[640px] border-collapse text-start text-xs">
+            <thead className="sticky top-0 z-[1] border-b border-slate-200 bg-slate-100 text-[10px] text-slate-500 shadow-[0_1px_0_0_rgb(226_232_240)]">
+              <tr>
+                <th className="w-8 px-1 py-2" aria-label={t('mw.expandShow')} />
+                <th className="min-w-[10rem] px-2 py-2">{t('mw.col.companyProduct')}</th>
+                <th className="px-2 py-2">{t('mw.col.batch')}</th>
+                <th className="px-2 py-2">{t('mw.col.production')}</th>
+                <th className="px-2 py-2 text-end">{t('mw.col.purchasedQty')}</th>
+                <th className="px-2 py-2 text-end">{t('mw.col.remaining')}</th>
+                <th className="px-2 py-2 text-end">{t('mw.col.price')}</th>
+                <th className="px-2 py-2">{t('mw.col.purchaseDate')}</th>
+                <th className="px-2 py-2">{t('mw.col.category')}</th>
             </tr>
           </thead>
           <tbody>
             {gridQ.isPending ? (
               <tr>
-                <td colSpan={10} className="px-2 py-6 text-center text-slate-500">
+                <td colSpan={9} className="px-2 py-6 text-center text-slate-500">
                   {t('common.loading')}
                 </td>
               </tr>
-            ) : pageRows.length === 0 ? (
+            ) : pageGroups.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-2 py-6 text-center text-slate-500">
+                <td colSpan={9} className="px-2 py-6 text-center text-slate-500">
                   {t('mw.gridEmpty')}
                 </td>
               </tr>
             ) : (
-              pageRows.map((r, idx) => {
-                const globalIdx = (page - 1) * pageSize + idx
-                const active = selectedKey === rowKey(r)
+              pageGroups.map((g) => {
+                const multi = g.lines.length > 1
+                const expanded = expandedProductIds.has(g.productId)
+                const groupSelected = Boolean(selectedRow && selectedRow.productId === g.productId)
+
+                if (!multi) {
+                  const r = g.lines[0]!
+                  const active = selectedKey === rowKey(r)
+                  return (
+                    <tr
+                      key={`single-${r.productId}-${r.purchaseId ?? 'np'}`}
+                      onClick={() => loadRow(r)}
+                      className={[
+                        'cursor-pointer border-b border-slate-200 hover:bg-slate-100',
+                        active ? 'bg-sky-100' : '',
+                      ].join(' ')}
+                    >
+                      <td className="px-1 py-1.5" />
+                      <td className="px-2 py-1.5 text-slate-800">
+                        {catalogDisplayName({
+                          companyName: r.companyName,
+                          name: r.inventoryName,
+                          packageSize: r.packageSize,
+                        })}
+                      </td>
+                      <td className="px-2 py-1.5 font-mono text-slate-600">{r.batchLabel}</td>
+                      <td className="px-2 py-1.5 text-slate-600">{r.productionDate.slice(0, 10)}</td>
+                      <td className="px-2 py-1.5 text-end font-mono text-slate-800">{r.purchasedQuantity}</td>
+                      <td className="px-2 py-1.5 text-end font-mono text-slate-700">
+                        {r.onHandAtMain == null ? '—' : r.onHandAtMain}
+                      </td>
+                      <td className="px-2 py-1.5 text-end font-mono text-slate-800">{r.purchasePrice}</td>
+                      <td className="px-2 py-1.5 text-slate-600">{r.purchaseDate.slice(0, 10)}</td>
+                      <td className="px-2 py-1.5 text-slate-600">{r.productCategory}</td>
+                    </tr>
+                  )
+                }
+
                 return (
-                  <tr
-                    key={`${r.productId}-${r.purchaseId ?? 'x'}-${r.batchNumber}-${globalIdx}`}
-                    onClick={() => loadRow(r)}
-                    className={[
-                      'cursor-pointer border-b border-slate-200 hover:bg-slate-100',
-                      active ? 'bg-sky-100' : '',
-                    ].join(' ')}
-                  >
-                    <td className="px-2 py-1.5 text-slate-800">{r.companyName}</td>
-                    <td className="px-2 py-1.5 font-mono text-slate-600">{r.batchLabel}</td>
-                    <td className="px-2 py-1.5 text-slate-800">{r.inventoryName}</td>
-                    <td className="px-2 py-1.5 text-slate-600">{r.productionDate.slice(0, 10)}</td>
-                    <td className="px-2 py-1.5 text-end font-mono text-slate-800">{r.purchasedQuantity}</td>
-                    <td className="px-2 py-1.5 text-end font-mono text-slate-700">
-                      {r.onHandAtMain == null ? '—' : r.onHandAtMain}
-                    </td>
-                    <td className="px-2 py-1.5 text-end font-mono text-slate-800">{r.purchasePrice}</td>
-                    <td className="px-2 py-1.5 text-slate-600">{r.purchaseDate.slice(0, 10)}</td>
-                    <td className="px-2 py-1.5 text-slate-600">{r.packageSize}</td>
-                    <td className="px-2 py-1.5 text-slate-600">{r.productCategory}</td>
-                  </tr>
+                  <Fragment key={`grp-${g.productId}`}>
+                    <tr
+                      onClick={() => onParentGroupClick(g)}
+                      className={[
+                        'cursor-pointer border-b border-slate-200 bg-slate-50/80 hover:bg-amber-50/90',
+                        groupSelected ? 'bg-amber-50/70' : '',
+                        expanded ? 'ring-1 ring-inset ring-amber-200/80' : '',
+                      ].join(' ')}
+                      title={t('mw.expandShow')}
+                    >
+                      <td className="px-1 py-1.5 align-middle">
+                        <button
+                          type="button"
+                          aria-expanded={expanded}
+                          aria-label={expanded ? t('mw.expandHide') : t('mw.expandShow')}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onParentGroupClick(g)
+                          }}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded border border-slate-300 bg-white text-[10px] text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
+                        >
+                          {expanded ? '▼' : '▶'}
+                        </button>
+                      </td>
+                      <td className="px-2 py-1.5 font-medium text-slate-900">
+                        {catalogDisplayName({
+                          companyName: g.companyName,
+                          name: g.inventoryName,
+                          packageSize: g.packageSize,
+                        })}
+                      </td>
+                      <td className="px-2 py-1.5 text-xs font-medium text-amber-900/90">{batchSummaryLabel(g)}</td>
+                      <td className="px-2 py-1.5 text-slate-500">{t('mw.mergedCell')}</td>
+                      <td className="px-2 py-1.5 text-end font-mono font-medium text-slate-900">
+                        {g.totalPurchasedQty}
+                      </td>
+                      <td className="px-2 py-1.5 text-end font-mono font-medium text-slate-800">
+                        {g.onHandAtMain == null ? '—' : g.onHandAtMain}
+                      </td>
+                      <td className="px-2 py-1.5 text-end font-mono text-xs text-slate-700">
+                        {g.weightedAvgPrice == null ? '—' : g.weightedAvgPrice.toFixed(2)}
+                      </td>
+                      <td className="px-2 py-1.5 text-xs text-slate-700">{g.lastPurchaseDate.slice(0, 10)}</td>
+                      <td className="px-2 py-1.5 text-slate-600">{g.productCategory}</td>
+                    </tr>
+                    {expanded &&
+                      g.lines.map((r, idx) => {
+                        const active = selectedKey === rowKey(r)
+                        return (
+                          <tr
+                            key={`${g.productId}-d-${r.purchaseId ?? 'np'}-${r.batchNumber}-${idx}`}
+                            onClick={() => loadRow(r)}
+                            title={t('mw.detailRowHint')}
+                            className={[
+                              'cursor-pointer border-b border-slate-100 bg-white hover:bg-sky-50/80',
+                              active ? 'bg-sky-100' : '',
+                            ].join(' ')}
+                          >
+                            <td className="px-1 py-1" />
+                            <td className="px-2 py-1 ps-5 text-[11px] text-slate-700">
+                              {catalogDisplayName({
+                                companyName: r.companyName,
+                                name: r.inventoryName,
+                                packageSize: r.packageSize,
+                              })}
+                            </td>
+                            <td className="px-2 py-1 font-mono text-[11px] text-slate-600">{r.batchLabel || '—'}</td>
+                            <td className="px-2 py-1 text-[11px] text-slate-600">{r.productionDate.slice(0, 10)}</td>
+                            <td className="px-2 py-1 text-end font-mono text-[11px] text-slate-800">
+                              {r.purchasedQuantity}
+                            </td>
+                            <td className="px-2 py-1 text-end font-mono text-[11px] text-slate-600">
+                              {r.onHandAtMain == null ? '—' : r.onHandAtMain}
+                            </td>
+                            <td className="px-2 py-1 text-end font-mono text-[11px] text-slate-800">{r.purchasePrice}</td>
+                            <td className="px-2 py-1 text-[11px] text-slate-600">{r.purchaseDate.slice(0, 10)}</td>
+                            <td className="px-2 py-1 text-[11px] text-slate-600">{r.productCategory}</td>
+                          </tr>
+                        )
+                      })}
+                  </Fragment>
                 )
               })
             )}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
         <span>
-          {t('mw.pageLabel')} {page} {t('mw.pageSep')} {totalPages} — {rows.length} {t('mw.rowsLabel')}
+          {t('mw.pageLabel')} {page} {t('mw.pageSep')} {totalPages} — {productGroups.length}{' '}
+          {t('mw.rowsLabel')}
         </span>
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-1">

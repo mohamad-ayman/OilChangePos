@@ -2,6 +2,7 @@ import { DomainStockMovementType, type StockMovement } from '@/entities/stock-mo
 import type { Warehouse } from '@/entities/warehouse'
 import type { InventoryGridRow, WarehouseScope } from '@/features/inventory/hooks/useInventory'
 import { useStockHistoryForProduct } from '@/features/inventory/hooks/useInventory'
+import { catalogDisplayName } from '@/shared/utils/catalogLine'
 import { t } from '@/i18n'
 
 function movementKindLabel(kind: StockMovement['movementType']): string {
@@ -55,7 +56,11 @@ export function ProductDetailsDrawer({
         <header className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3">
           <div className="min-w-0">
             <p id="inv-drawer-title" className="truncate text-sm font-semibold text-slate-900">
-              {row.name}
+              {catalogDisplayName({
+                companyName: row.companyName,
+                name: row.name,
+                packageSize: row.packageSize,
+              })}
             </p>
             <p className="mt-0.5 font-mono text-[11px] text-slate-500">{row.sku}</p>
           </div>
@@ -112,6 +117,7 @@ export function ProductDetailsDrawer({
 
           <section className="mt-3">
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{t('inv.drawer.movements')}</h3>
+            <p className="mt-1 text-[10px] leading-relaxed text-slate-500">{t('inv.drawer.movementsLegend')}</p>
             {history.isPending ? (
               <p className="mt-2 text-slate-500">{t('inv.drawer.loadingHistory')}</p>
             ) : history.isError ? (

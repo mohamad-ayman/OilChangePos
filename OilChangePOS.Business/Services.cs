@@ -32,6 +32,16 @@ internal static class ProductDisplayNames
         var cn = string.IsNullOrWhiteSpace(companyName) ? null : companyName.Trim();
         return cn is null or "" ? pn : $"{cn} — {pn}";
     }
+
+    /// <summary>Shelf line: <c>شركة — صنف — تعبئة</c> when <paramref name="packageSize"/> is set (e.g. Mobil — 5W30 — 4L).</summary>
+    internal static string CatalogDisplayName(string? companyName, string? productName, string? packageSize = null)
+    {
+        var baseLine = CatalogLine(companyName, productName ?? string.Empty);
+        var pack = string.IsNullOrWhiteSpace(packageSize) ? null : packageSize.Trim();
+        if (pack is null) return baseLine;
+        if (baseLine == "—") return pack;
+        return $"{baseLine} — {pack}";
+    }
 }
 
 internal static class WarehouseStock
@@ -65,14 +75,15 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
     public async Task<List<LowStockItemDto>> GetLowStockAsync(int warehouseId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var products = await db.Products.Where(x => x.IsActive).ToListAsync(cancellationToken);
+        var products = await db.Products.Where(x => x.IsActive).Include(x => x.Company).ToListAsync(cancellationToken);
         var result = new List<LowStockItemDto>();
         foreach (var p in products)
         {
             var stock = await WarehouseStock.GetOnHandAsync(db, p.Id, warehouseId, cancellationToken);
             if (stock <= LowStockThreshold)
             {
-                result.Add(new LowStockItemDto(p.Id, p.Name, stock, LowStockThreshold));
+                var label = ProductDisplayNames.CatalogDisplayName(p.Company?.Name, p.Name, p.PackageSize);
+                result.Add(new LowStockItemDto(p.Id, label, stock, LowStockThreshold));
             }
         }
         return result.OrderBy(x => x.CurrentStock).ToList();
@@ -724,9 +735,9 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
             where ids.Contains(p.Id)
             join c in db.Companies.AsNoTracking() on p.CompanyId equals c.Id into cj
             from c in cj.DefaultIfEmpty()
-            select new { p.Id, p.Name, CompanyName = c != null ? c.Name : (string?)null }
+            select new { p.Id, p.Name, p.PackageSize, CompanyName = c != null ? c.Name : (string?)null }
         ).ToListAsync(cancellationToken);
-        return rows.ToDictionary(x => x.Id, x => ProductDisplayNames.CatalogLine(x.CompanyName, x.Name));
+        return rows.ToDictionary(x => x.Id, x => ProductDisplayNames.CatalogDisplayName(x.CompanyName, x.Name, x.PackageSize));
     }
 
     public async Task<DailySalesDto> GetDailySalesReportAsync(DateTime dateUtc, CancellationToken cancellationToken = default)
@@ -830,14 +841,14 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
             .GroupBy(x => x.ProductId)
             .ToDictionary(g => g.Key, g => g.Sum(x => x.Quantity));
 
-        var activeProducts = await db.Products.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Name).ToListAsync(cancellationToken);
+        var activeProducts = await db.Products.AsNoTracking().Where(x => x.IsActive).Include(x => x.Company).OrderBy(x => x.Name).ToListAsync(cancellationToken);
         var slowMoving = new List<SlowMovingProductDto>();
         foreach (var p in activeProducts)
         {
             var onHand = await inventoryService.GetCurrentStockAsync(p.Id, warehouseId, cancellationToken);
             var sold = soldQtyByProduct.GetValueOrDefault(p.Id, 0m);
             if (onHand >= 1 && sold < 1)
-                slowMoving.Add(new SlowMovingProductDto(p.Name, onHand, sold));
+                slowMoving.Add(new SlowMovingProductDto(ProductDisplayNames.CatalogDisplayName(p.Company?.Name, p.Name, p.PackageSize), onHand, sold));
         }
 
         slowMoving = slowMoving.OrderByDescending(x => x.OnHandAtWarehouse).Take(25).ToList();
@@ -1088,7 +1099,7 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
         StockMovementType.Purchase => "شراء",
         StockMovementType.Sale => "بيع",
         StockMovementType.Transfer => "تحويل",
-        StockMovementType.Adjust => "تسوية",
+        StockMovementType.Adjust => "تسوية جرد",
         _ => t.ToString()
     };
 
@@ -1228,14 +1239,14 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
                 .Select(g => new { g.Key, Qty = g.Sum(x => x.Quantity) })
                 .ToDictionaryAsync(x => x.Key, x => x.Qty, cancellationToken);
 
-        var active = await db.Products.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Name).ToListAsync(cancellationToken);
+        var active = await db.Products.AsNoTracking().Where(x => x.IsActive).Include(x => x.Company).OrderBy(x => x.Name).ToListAsync(cancellationToken);
         var list = new List<SlowMovingProductDto>();
         foreach (var p in active)
         {
             var onHand = await inventoryService.GetCurrentStockAsync(p.Id, warehouseId, cancellationToken);
             var sold = soldByProduct.GetValueOrDefault(p.Id, 0m);
             if (onHand >= 1 && sold < 1)
-                list.Add(new SlowMovingProductDto(p.Name, onHand, sold));
+                list.Add(new SlowMovingProductDto(ProductDisplayNames.CatalogDisplayName(p.Company?.Name, p.Name, p.PackageSize), onHand, sold));
         }
 
         return list.OrderByDescending(x => x.OnHandAtWarehouse).Take(Math.Clamp(take, 1, 500)).ToList();
@@ -1349,7 +1360,7 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
                 whName,
                 cust == null ? "زبون عابر / بدون سجل" : cust.FullName,
                 usr.Username,
-                (co == null || co.Name == null || co.Name == "") ? pr.Name : co.Name + " — " + pr.Name,
+                ProductDisplayNames.CatalogDisplayName(co == null ? null : co.Name, pr.Name, pr.PackageSize),
                 ii.Quantity,
                 ii.UnitPrice,
                 ii.LineTotal,
@@ -1368,6 +1379,7 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
 
         var purchases = await db.Purchases.AsNoTracking()
             .Include(x => x.Product)
+            .ThenInclude(p => p!.Company)
             .Include(x => x.CreatedByUser)
             .Where(x => x.WarehouseId == warehouseId
                         && x.PurchaseDate >= fromLocalDate.Date
@@ -1384,7 +1396,7 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
             list.Add(new BranchIncomingRegisterDto(
                 entryUtc,
                 "شراء (وارد)",
-                p.Product?.Name ?? $"#{p.ProductId}",
+                ProductDisplayNames.CatalogDisplayName(p.Product?.Company?.Name, p.Product?.Name ?? $"#{p.ProductId}", p.Product?.PackageSize),
                 p.Quantity,
                 amt,
                 "شراء للمستودع المحدد",
@@ -1394,6 +1406,7 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
 
         var transfersIn = await db.StockMovements.AsNoTracking()
             .Include(x => x.Product)
+            .ThenInclude(p => p!.Company)
             .Include(x => x.FromWarehouse)
             .Where(x => x.MovementType == StockMovementType.Transfer
                         && x.ToWarehouseId == warehouseId
@@ -1408,7 +1421,7 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
             list.Add(new BranchIncomingRegisterDto(
                 m.MovementDateUtc,
                 "تحويل وارد",
-                m.Product?.Name ?? $"#{m.ProductId}",
+                ProductDisplayNames.CatalogDisplayName(m.Product?.Company?.Name, m.Product?.Name ?? $"#{m.ProductId}", m.Product?.PackageSize),
                 m.Quantity,
                 0m,
                 m.FromWarehouse != null ? $"من: {m.FromWarehouse.Name}" : "من: —",
@@ -1503,7 +1516,7 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
 
     private static async Task<List<InventorySnapshotDto>> GetInventorySnapshotCoreAsync(OilChangePosDbContext db, int warehouseId, CancellationToken cancellationToken)
     {
-        var products = await db.Products.Where(x => x.IsActive).ToListAsync(cancellationToken);
+        var products = await db.Products.Where(x => x.IsActive).Include(x => x.Company).ToListAsync(cancellationToken);
         var ids = products.Select(p => p.Id).ToList();
         var overrides = await BranchSalePricing.LoadOverridesAsync(db, warehouseId, ids, cancellationToken);
         var list = new List<InventorySnapshotDto>();
@@ -1511,7 +1524,8 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
         {
             var stock = await WarehouseStock.GetOnHandAsync(db, product.Id, warehouseId, cancellationToken);
             var unit = BranchSalePricing.EffectiveSalePrice(product.UnitPrice, overrides, product.Id);
-            list.Add(new InventorySnapshotDto(product.Id, product.Name, stock, unit, stock * unit));
+            var label = ProductDisplayNames.CatalogDisplayName(product.Company?.Name, product.Name, product.PackageSize);
+            list.Add(new InventorySnapshotDto(product.Id, label, stock, unit, stock * unit));
         }
         return list.OrderBy(x => x.ProductName).ToList();
     }

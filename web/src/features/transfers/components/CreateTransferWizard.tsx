@@ -1,4 +1,5 @@
 import { useCreateTransferWizard } from '@/features/transfers/hooks/useCreateTransferWizard'
+import { catalogDisplayName } from '@/shared/utils/catalogLine'
 import { t } from '@/i18n'
 
 export function CreateTransferWizard() {
@@ -121,10 +122,25 @@ export function CreateTransferWizard() {
                 <button
                   key={p.id}
                   type="button"
-                  onClick={() => w.addLine(p.id, p.name)}
+                  onClick={() =>
+                    w.addLine(
+                      p.id,
+                      catalogDisplayName({
+                        companyName: p.companyName,
+                        name: p.name,
+                        packageSize: p.packageSize,
+                      }),
+                    )
+                  }
                   className="flex w-full items-center justify-between border-b border-slate-200 px-2 py-1.5 text-start text-xs hover:bg-slate-100"
                 >
-                  <span className="text-slate-800">{p.name}</span>
+                  <span className="text-slate-800">
+                    {catalogDisplayName({
+                      companyName: p.companyName,
+                      name: p.name,
+                      packageSize: p.packageSize,
+                    })}
+                  </span>
                   <span className="font-mono text-[10px] text-slate-500">#{p.id}</span>
                 </button>
               ))}

@@ -1,4 +1,5 @@
 import type { InventoryGridRow, InventorySortColumn, InventorySortDir } from '@/features/inventory/hooks/useInventory'
+import { catalogDisplayName } from '@/shared/utils/catalogLine'
 import { t } from '@/i18n'
 
 type InventoryTableProps = {
@@ -120,7 +121,13 @@ export function InventoryTable({
                 className="cursor-pointer border-b border-slate-200 odd:bg-slate-50 hover:bg-slate-100/60"
                 onClick={() => onRowClick(r)}
               >
-                <td className="max-w-[14rem] truncate px-2 py-1.5 font-medium text-slate-900">{r.name}</td>
+                <td className="max-w-[14rem] truncate px-2 py-1.5 font-medium text-slate-900">
+                  {catalogDisplayName({
+                    companyName: r.companyName,
+                    name: r.name,
+                    packageSize: r.packageSize,
+                  })}
+                </td>
                 <td className="whitespace-nowrap px-2 py-1.5 font-mono text-slate-600">{r.sku}</td>
                 <td className="whitespace-nowrap px-2 py-1.5 text-slate-600">{r.category}</td>
                 <td className="whitespace-nowrap px-2 py-1.5 text-end tabular-nums text-slate-700">

@@ -150,6 +150,10 @@ export const messagesAr: Record<string, string> = {
   'mw.col.company': 'الشركة',
   'mw.col.batch': 'دفعة',
   'mw.col.product': 'اسم المنتج',
+  /** Single column: matches `catalogLine` (شركة — صنف). */
+  'mw.col.companyProduct': 'الشركة — الصنف',
+  'mw.gridHint':
+    'الأصناف ذات عدة مشتريات تظهر صفاً واحداً؛ اضغط الصف أو ▶ لعرض كل الدفعات. اضغط دفعة للتعديل أو الحذف.',
   'mw.col.production': 'تاريخ الإنتاج',
   'mw.col.purchasedQty': 'كمية الشراء',
   'mw.col.remaining': 'المتبقي',
@@ -171,6 +175,13 @@ export const messagesAr: Record<string, string> = {
   'mw.confirmDelete': 'حذف سجل الشراء المحدد؟',
   'mw.importEmpty': 'لم يُعثر على أسطر صالحة في الملف.',
   'mw.mutationError': 'تعذّر تنفيذ العملية. تحقق من الاتصال أو الصلاحيات.',
+  'mw.expandShow': 'عرض دفعات الشراء لهذا الصنف',
+  'mw.expandHide': 'إخفاء دفعات الشراء',
+  'mw.groupBatchSummary': 'مجموع {count} عملية شراء',
+  'mw.groupBatchOne': 'دفعة شراء واحدة',
+  'mw.groupNoPurchaseLine': 'رصيد بدون سجل شراء',
+  'mw.detailRowHint': 'دفعة — اضغط للتعديل أو الحذف',
+  'mw.mergedCell': '—',
 
   // Inventory (stock balances grid)
   'stockReq.title': 'طلبات التوريد من الرئيسي',
@@ -249,7 +260,10 @@ export const messagesAr: Record<string, string> = {
   'inv.move.purchase': 'شراء',
   'inv.move.sale': 'بيع',
   'inv.move.transfer': 'تحويل',
-  'inv.move.adjust': 'تسوية',
+  /** StockMovementType.Adjust — delta after physical count vs system (audit), not sale/purchase. */
+  'inv.move.adjust': 'تسوية جرد',
+  'inv.drawer.movementsLegend':
+    '«تسوية جرد» = تسجيل فرق بين الرصيد في النظام والكمية الفعلية بعد جرد مخزون (تصحيح رصيد). أما الشراء والبيع والتحويل فحركات تشغيل عادية.',
 
   // Catalog admin (WinForms «الشركات والأصناف» tab — `api/catalog-admin`)
   'catalog.pageTitle': 'الشركات والأصناف',

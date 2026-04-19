@@ -1,4 +1,5 @@
 import type { Product } from '@/entities/product'
+import { catalogDisplayName } from '@/shared/utils/catalogLine'
 import type { StockLedger } from '@/features/inventory/domain/inventory.engine'
 import { applyStockMovement, validateStockBeforeOperation } from '@/features/inventory/domain/inventory.engine'
 
@@ -52,7 +53,11 @@ export function addItem(state: POSCartState, product: Product, qty = 1): POSCart
       {
         uid: newUid(),
         productId: product.id,
-        name: product.name,
+        name: catalogDisplayName({
+          companyName: product.companyName,
+          name: product.name,
+          packageSize: product.packageSize,
+        }),
         category: product.productCategory,
         unitPrice: product.unitPrice,
         quantity: q,

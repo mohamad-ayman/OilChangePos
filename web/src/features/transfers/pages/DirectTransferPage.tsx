@@ -12,6 +12,7 @@ import {
   getWarehouses,
 } from '@/shared/api/inventory.api'
 import { useAuthStore } from '@/shared/store/auth.store'
+import { catalogDisplayName } from '@/shared/utils/catalogLine'
 import { t } from '@/i18n'
 
 type TransferProductOption = {
@@ -71,9 +72,11 @@ export function DirectTransferPage() {
       for (const r of snap) {
         if (r.currentStock <= 0) continue
         const p = pmap.get(r.productId)
-        const cname = p?.companyName ?? ''
-        const baseName = p?.name ?? r.productName
-        const label = !cname ? baseName : `${cname} — ${baseName}`
+        const label = catalogDisplayName({
+          companyName: p?.companyName,
+          name: p?.name ?? r.productName,
+          packageSize: p?.packageSize,
+        })
         opts.push({
           productId: r.productId,
           availableQty: r.currentStock,

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
-import { isAxiosError } from 'axios'
+import { formatApiError } from '@/shared/utils/formatApiError'
 import { stockRequestKeys } from '@/features/stock-requests/services/stockRequestQueryKeys'
 import { getProducts, getWarehouses } from '@/shared/api/inventory.api'
 import {
@@ -12,6 +12,7 @@ import {
 } from '@/shared/api/stockRequests.api'
 import { inventoryKeys } from '@/features/inventory/services/inventoryQueryKeys'
 import { useAuthStore } from '@/shared/store/auth.store'
+import { catalogDisplayName } from '@/shared/utils/catalogLine'
 import { t } from '@/i18n'
 
 function fmtWhen(iso: string) {
@@ -99,7 +100,7 @@ export function StockRequestsPage() {
       invalidate()
     },
     onError: (e) => {
-      setFormError(isAxiosError(e) ? (e.response?.data as string) || e.message : String(e))
+      setFormError(formatApiError(e))
     },
   })
 
@@ -110,7 +111,7 @@ export function StockRequestsPage() {
       invalidate()
     },
     onError: (e) => {
-      setActionError(isAxiosError(e) ? (e.response?.data as string) || e.message : String(e))
+      setActionError(formatApiError(e))
     },
   })
 
@@ -123,7 +124,7 @@ export function StockRequestsPage() {
       invalidate()
     },
     onError: (e) => {
-      setActionError(isAxiosError(e) ? (e.response?.data as string) || e.message : String(e))
+      setActionError(formatApiError(e))
     },
   })
 
@@ -134,7 +135,7 @@ export function StockRequestsPage() {
       invalidate()
     },
     onError: (e) => {
-      setActionError(isAxiosError(e) ? (e.response?.data as string) || e.message : String(e))
+      setActionError(formatApiError(e))
     },
   })
 
@@ -183,7 +184,11 @@ export function StockRequestsPage() {
                 <option value="">{t('stockReq.pickProduct')}</option>
                 {(productsQuery.data ?? []).map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.companyName ? `${p.companyName} — ${p.name}` : p.name} ({p.packageSize})
+                    {catalogDisplayName({
+                      companyName: p.companyName,
+                      name: p.name,
+                      packageSize: p.packageSize,
+                    })}
                   </option>
                 ))}
               </select>
