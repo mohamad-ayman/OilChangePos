@@ -32,7 +32,7 @@ export function TransfersPage() {
   }, [whQuery.data])
 
   return (
-    <div className="border-b border-slate-200 px-3 py-4 sm:px-4">
+    <div className="space-y-4 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm shadow-slate-900/[0.04] ring-1 ring-slate-900/[0.02] sm:p-5">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <Link to="/app/transfers" className="mb-2 inline-block text-[11px] text-sky-700 hover:underline">

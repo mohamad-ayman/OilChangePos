@@ -3,15 +3,15 @@ import { t } from '@/i18n'
 
 export function NotFoundPage() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center gap-6 px-6 py-16 text-center">
-      <p className="text-6xl font-bold text-slate-700">404</p>
-      <h1 className="text-xl font-semibold text-slate-900">{t('nf.title')}</h1>
+    <div className="mx-auto flex max-w-lg flex-col items-center justify-center gap-6 rounded-2xl border border-slate-200/90 bg-white px-8 py-14 text-center shadow-md shadow-slate-900/10 ring-1 ring-slate-900/[0.03] sm:py-16">
+      <p className="text-6xl font-black tabular-nums text-slate-300">404</p>
+      <h1 className="text-lg font-bold text-slate-900 sm:text-xl">{t('nf.title')}</h1>
       <Link
         to="/"
-        className="text-sky-700 underline-offset-4 hover:underline"
+        className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-semibold text-sky-900 transition-colors hover:bg-sky-100"
       >
         {t('nf.home')}
       </Link>
-    </main>
+    </div>
   )
 }

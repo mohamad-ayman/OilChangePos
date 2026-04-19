@@ -4,12 +4,10 @@
  */
 export const messagesAr: Record<string, string> = {
   // Nav
-  'nav.section.overview': 'نظرة عامة',
   'nav.section.sales': 'المبيعات',
   'nav.section.stock': 'المخزون والتوريد',
   'nav.section.insights': 'التقارير والتحليلات',
   'nav.section.admin': 'إدارة النظام',
-  'nav.dashboard': 'لوحة التحكم',
   'nav.pos': 'نقطة البيع',
   /** Main warehouse — purchases & batches (`api/main-warehouse`). */
   'nav.mainWarehouse': 'المستودع الرئيسي',
@@ -57,10 +55,6 @@ export const messagesAr: Record<string, string> = {
   'auth.loginFailed': 'فشل تسجيل الدخول.',
   'auth.missingJwt':
     'الخادم لم يُرجع رمز JWT. أوقف عملية OilChangePOS.API ثم نفّذ dotnet build وأعد التشغيل، ثم سجّل الدخول من جديد.',
-
-  // Dashboard / placeholders
-  'dashboard.title': 'لوحة التحكم',
-  'dashboard.body': 'نظرة عامة على مساحة العمل. سيتم إضافة محتوى الوحدات في خطوات لاحقة.',
 
   'module.products.title': 'المنتجات',
   'module.products.desc': 'هذا القسم مخصص لوحدة المنتجات.',

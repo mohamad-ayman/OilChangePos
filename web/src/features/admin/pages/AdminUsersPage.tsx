@@ -139,8 +139,8 @@ export function AdminUsersPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-10 px-4 py-8">
-      <header className="space-y-2 border-b border-slate-200 pb-6">
+    <div className="mx-auto max-w-6xl space-y-10 rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm shadow-slate-900/[0.04] ring-1 ring-slate-900/[0.02] sm:p-8">
+      <header className="space-y-2 border-b border-slate-200/80 pb-6">
         <h1 className="text-2xl font-bold text-slate-900">{t('admin.title')}</h1>
         <p className="text-sm text-slate-600">{t('admin.hintServerAuthority')}</p>
         {flash ? (

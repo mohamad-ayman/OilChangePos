@@ -247,7 +247,7 @@ export function CatalogPage() {
   const busy = saveCompanyMut.isPending || saveProductMut.isPending
 
   return (
-    <div className="border-b border-slate-200 bg-slate-50 px-3 py-4 sm:px-5">
+    <div className="space-y-6 rounded-2xl border border-slate-200/90 bg-gradient-to-b from-slate-50/80 to-white p-4 shadow-sm shadow-slate-900/[0.04] ring-1 ring-slate-900/[0.02] sm:p-6">
       <header className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="border-r-4 border-sky-600 pe-4">
           <h1 className="text-xl font-bold text-slate-900">{t('catalog.pageTitle')}</h1>

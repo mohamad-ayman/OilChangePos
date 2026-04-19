@@ -429,14 +429,14 @@ export function MainWarehousePage() {
 
   if (!mainWh) {
     return (
-      <div className="border-b border-slate-200 px-3 py-8 text-center text-sm text-amber-800 sm:px-4">
+      <div className="rounded-2xl border border-amber-200/90 bg-amber-50/90 px-4 py-10 text-center text-sm text-amber-900 shadow-sm sm:px-6">
         {t('mw.noMainWarehouse')}
       </div>
     )
   }
 
   return (
-    <div className="border-b border-slate-200 px-3 py-4 sm:px-4">
+    <div className="space-y-4 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm shadow-slate-900/[0.04] ring-1 ring-slate-900/[0.02] sm:p-5">
       <input ref={fileRef} type="file" accept=".csv,text/csv,text/plain" className="hidden" onChange={onImportFile} />
 
       <div className="flex flex-col gap-2 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">

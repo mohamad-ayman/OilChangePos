@@ -78,8 +78,8 @@ export function ReportsDashboardPage() {
     ) : null
 
   return (
-    <div className="space-y-8 border-b border-slate-200 px-3 py-5 sm:px-5">
-      <header className="max-w-3xl">
+    <div className="space-y-8 pb-2">
+      <header className="max-w-3xl rounded-2xl border border-slate-200/90 bg-white/90 p-5 shadow-sm shadow-slate-900/[0.04] ring-1 ring-slate-900/[0.02] sm:p-6">
         <h1 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">{t('rep.title')}</h1>
         <p className="mt-1 text-sm text-slate-600">{t(showProfitMetrics ? 'rep.subtitle' : 'rep.subtitleBranch')}</p>
       </header>

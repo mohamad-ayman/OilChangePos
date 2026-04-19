@@ -105,8 +105,8 @@ export function POSPage() {
   }, [])
 
   return (
-    <div className="flex h-[calc(100dvh-3rem)] max-h-[900px] flex-col gap-2 border-b border-slate-200 px-2 py-2 sm:px-3">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 rounded-2xl border border-slate-200/90 bg-white p-3 shadow-sm shadow-slate-900/[0.04] ring-1 ring-slate-900/[0.02] sm:p-4">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
         <div>
           <h1 className="text-base font-bold text-slate-900">{t('pos.title')}</h1>
           <p className="mt-0.5 text-sm text-slate-600">{t('pos.subtitle')}</p>

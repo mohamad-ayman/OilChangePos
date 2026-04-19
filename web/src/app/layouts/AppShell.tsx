@@ -11,24 +11,16 @@ export function AppShell() {
   )
 }
 
-/** Dashboard home (placeholder until reporting module). */
-export function ShellDashboardPage() {
-  return (
-    <div className="border-b border-slate-200 px-4 py-6 sm:px-6">
-      <h1 className="text-xl font-semibold text-slate-900">{t('dashboard.title')}</h1>
-      <p className="mt-2 max-w-2xl text-base leading-relaxed text-slate-600">{t('dashboard.body')}</p>
-    </div>
-  )
-}
-
 type ShellModuleId = 'products' | 'purchases' | 'users'
 
 /** Generic placeholder for menu targets before business modules exist. */
 export function ShellModulePlaceholder({ moduleId }: { moduleId: ShellModuleId }) {
   return (
-    <div className="border-b border-slate-200 px-4 py-6 sm:px-6">
-      <h1 className="text-xl font-semibold text-slate-900">{t(`module.${moduleId}.title`)}</h1>
-      <p className="mt-2 text-base leading-relaxed text-slate-600">{t(`module.${moduleId}.desc`)}</p>
+    <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm shadow-slate-900/5 sm:p-8">
+      <div className="mx-auto max-w-2xl">
+        <h1 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">{t(`module.${moduleId}.title`)}</h1>
+        <p className="mt-3 text-sm leading-relaxed text-slate-600 sm:text-base">{t(`module.${moduleId}.desc`)}</p>
+      </div>
     </div>
   )
 }

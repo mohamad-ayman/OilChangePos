@@ -52,7 +52,7 @@ export function TransferDetailsPage() {
   }
 
   return (
-    <div className="border-b border-slate-200 px-3 py-4 sm:px-4">
+    <div className="space-y-4 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm shadow-slate-900/[0.04] ring-1 ring-slate-900/[0.02] sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-4">
         <div>
           <Link to="/app/transfers/requests" className="text-[11px] text-sky-700 hover:underline">

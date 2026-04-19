@@ -8,8 +8,8 @@ export function InventoryPage() {
   const drawerOpen = inv.selectedProductId != null
 
   return (
-    <div className="border-b border-slate-200 px-3 py-4 sm:px-4">
-      <div className="flex flex-col gap-1 border-b border-slate-200 pb-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm shadow-slate-900/[0.04] ring-1 ring-slate-900/[0.02]">
+      <div className="flex flex-col gap-1 border-b border-slate-200/80 bg-slate-50/50 px-4 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-5">
         <div>
           <h1 className="text-base font-semibold text-slate-900">{t('inv.title')}</h1>
           <p className="text-xs text-slate-500">{t('inv.subtitle')}</p>
@@ -62,7 +62,7 @@ export function InventoryPage() {
         </div>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-2 px-4 pb-4 sm:px-5">
         <InventoryTable
           rows={inv.rows}
           sortColumn={inv.sortColumn}

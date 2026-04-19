@@ -1,10 +1,7 @@
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 import { AuthHydrationBoundary } from '@/features/auth/components/AuthHydrationBoundary'
-import {
-  AppShell,
-  ShellDashboardPage,
-  ShellModulePlaceholder,
-} from '@/app/layouts/AppShell'
+import { AppShell, ShellModulePlaceholder } from '@/app/layouts/AppShell'
+import { AppHomeRedirect } from '@/app/router/AppHomeRedirect'
 import { InventoryPage } from '@/features/inventory'
 import { MainWarehousePage } from '@/features/main-warehouse'
 import { POSPage } from '@/features/pos'
@@ -37,7 +34,7 @@ const router = createBrowserRouter([
             path: '/app',
             element: <AppShell />,
             children: [
-              { index: true, element: <ShellDashboardPage /> },
+              { index: true, element: <AppHomeRedirect /> },
               { path: 'pos', element: <POSPage /> },
               { path: 'stock-balances', element: <InventoryPage /> },
               { path: 'stock-requests', element: <StockRequestsPage /> },

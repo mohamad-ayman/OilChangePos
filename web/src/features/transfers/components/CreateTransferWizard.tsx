@@ -6,7 +6,7 @@ export function CreateTransferWizard() {
   const w = useCreateTransferWizard()
 
   return (
-    <div className="border-b border-slate-200 px-3 py-4 sm:px-4">
+    <div className="space-y-4 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm shadow-slate-900/[0.04] ring-1 ring-slate-900/[0.02] sm:p-5">
       <div className="border-b border-slate-200 pb-3">
         <h1 className="text-base font-semibold text-slate-900">{t('xfer.wizard.title')}</h1>
         <p className="text-xs text-slate-500">{t('xfer.wizard.subtitle')}</p>
