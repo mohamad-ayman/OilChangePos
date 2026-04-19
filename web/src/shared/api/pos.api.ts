@@ -45,7 +45,7 @@ export type SubmitInvoicePayload = {
   userId: number
   paymentMethod: 'cash' | 'card'
   lines: { productId: number; quantity: number; unitPrice: number; name: string }[]
-  /** Same meaning as WinForms / API: subtracted from line subtotal after server-side pricing. */
+  /** Subtracted from line subtotal after server-side pricing (API contract). */
   discountAmount: number
   /** Client-computed total for receipt UI (server uses catalog prices on lines). */
   grandTotal: number
@@ -84,7 +84,7 @@ export async function getProductsForPOS(warehouseId: number): Promise<POSProduct
   }))
 }
 
-/** Single-line sale — same contract as WinForms `POST api/Sales`. */
+/** Single-line sale — `POST /api/Sales` (`CompleteSaleRequest`). */
 export async function createSale(payload: CreateSaleLinePayload): Promise<number> {
   if (usePosMock) {
     return mockDelay(70000 + payload.productId)
@@ -127,7 +127,7 @@ function receiptFromCompleteSale(invoiceId: number, payload: SubmitInvoicePayloa
 }
 
 /**
- * Full cashier checkout — `POST /api/Sales` with `CompleteSaleRequest` (same as OilChangePOS.WinForms `HttpSalesService`).
+ * Full cashier checkout — `POST /api/Sales` with `CompleteSaleRequest`.
  * Server prices lines from catalog + branch overrides; client receipt uses cart line prices for display.
  */
 export async function submitInvoice(payload: SubmitInvoicePayload): Promise<InvoiceDto> {

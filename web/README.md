@@ -1,6 +1,6 @@
 # OilChangePOS `web/` (React)
 
-This folder is the **browser UI** for the same backend as WinForms. It is **not** part of `OilChangePOS.sln` (npm/Vite only).
+This folder is the **browser UI** for OilChangePOS. It is **not** part of `OilChangePOS.sln` (npm/Vite only; the solution holds the .NET API and libraries).
 
 ## Step 1 — Foundation (current)
 

@@ -155,7 +155,7 @@ export const POSProductPanel = memo(function POSProductPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-300 bg-white shadow-sm">
-      {/* Module header — matches WinForms prodHeader */}
+      {/* Module header */}
       <header className="border-b border-slate-200 bg-white px-3 py-3 sm:px-4">
         <div className="border-r-4 border-sky-600 pe-3">
           <h2 className="text-end text-base font-bold text-slate-900">{t('pos.productsTitle')}</h2>
@@ -163,7 +163,7 @@ export const POSProductPanel = memo(function POSProductPanel({
         </div>
       </header>
 
-      {/* Filter strip — WinForms filterStrip */}
+      {/* Filter strip */}
       <div
         className="mx-2 mb-2 mt-2 grid gap-2 border border-slate-200 bg-slate-50 px-3 py-2.5 sm:grid-cols-2 lg:grid-cols-[minmax(0,12rem)_minmax(0,5.5rem)_1fr_minmax(0,12rem)]"
         dir="rtl"
@@ -235,7 +235,7 @@ export const POSProductPanel = memo(function POSProductPanel({
         </label>
       </div>
 
-      {/* Card grid — WinForms _productCardsPanel */}
+      {/* Product card grid */}
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#f8f9fc] px-3 py-3">
         {filtered.length === 0 ? (
           <p className="px-2 py-8 text-center text-sm italic text-slate-600">{t('pos.emptyProductGrid')}</p>

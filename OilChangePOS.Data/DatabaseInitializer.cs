@@ -182,7 +182,7 @@ public static class DatabaseInitializer
 
         throw new InvalidOperationException(
             "Database schema is missing Products.CompanyId. Automatic repair did not apply. Back up the database, then run: " +
-            "dotnet ef database update --project OilChangePOS.Data --startup-project OilChangePOS.WinForms");
+            "dotnet ef database update --project OilChangePOS.Data --startup-project OilChangePOS.API");
     }
 
     private static async Task<bool> DboProductsTableExistsAsync(DatabaseFacade database, CancellationToken cancellationToken = default)

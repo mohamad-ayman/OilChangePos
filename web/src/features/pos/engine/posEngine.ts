@@ -26,7 +26,7 @@ export function emptyCart(): POSCartState {
   return { lines: [], discount: { kind: 'none' } }
 }
 
-/** Same resolution as WinForms POS quantity (NumericUpDown 3 decimal places). */
+/** POS quantity step: three decimal places (matches API expectations). */
 export function normalizePosQty(qty: number): number {
   const n = Number(qty)
   if (!Number.isFinite(n) || n <= 0) return 0.001

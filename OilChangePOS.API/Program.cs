@@ -103,7 +103,7 @@ builder.Services.AddScoped<IServiceOrderService, ServiceOrderService>();
 
 var app = builder.Build();
 
-// Seed in the background so Kestrel can accept connections immediately (WinForms / other clients can start in parallel).
+// Seed in the background so Kestrel can accept connections immediately while the React dev server or other clients start.
 _ = Task.Run(async () =>
 {
     try

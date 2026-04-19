@@ -11,7 +11,7 @@ export const messagesAr: Record<string, string> = {
   'nav.section.admin': 'إدارة النظام',
   'nav.dashboard': 'لوحة التحكم',
   'nav.pos': 'نقطة البيع',
-  /** WinForms «المستودع الرئيسي» tab — purchases & batches (`api/main-warehouse`). */
+  /** Main warehouse — purchases & batches (`api/main-warehouse`). */
   'nav.mainWarehouse': 'المستودع الرئيسي',
   /** Multi-site stock snapshot grid (`GET api/Inventory/{warehouseId}`). */
   'nav.stockBalances': 'أرصدة المستودعات',
@@ -129,9 +129,9 @@ export const messagesAr: Record<string, string> = {
   'common.search': 'بحث',
   'common.reset': 'إعادة ضبط',
 
-  // Main warehouse (WinForms parity)
+  // Main warehouse
   'mw.title': 'المستودع الرئيسي — المشتريات والدفعات',
-  'mw.subtitle': 'إضافة وتعديل دفعات الشراء على المستودع الرئيسي — نفس منطق WinForms.',
+  'mw.subtitle': 'إضافة وتعديل دفعات الشراء على المستودع الرئيسي — نفس منطق الخادم.',
   'mw.formSection': 'بيانات الشراء',
   'mw.fieldProduct': 'الصنف (من الكتالوج)',
   'mw.selectProduct': '— اختر الصنف —',
@@ -265,7 +265,7 @@ export const messagesAr: Record<string, string> = {
   'inv.drawer.movementsLegend':
     '«تسوية جرد» = تسجيل فرق بين الرصيد في النظام والكمية الفعلية بعد جرد مخزون (تصحيح رصيد). أما الشراء والبيع والتحويل فحركات تشغيل عادية.',
 
-  // Catalog admin (WinForms «الشركات والأصناف» tab — `api/catalog-admin`)
+  // Catalog admin (`api/catalog-admin`)
   'catalog.pageTitle': 'الشركات والأصناف',
   'catalog.pageSubtitle':
     'أضف الشركة أولاً، ثم اخترها من الجدول وأضف أصنافها (زيت / فلتر / شحم / …). المخزون يُستلم من المستودع الرئيسي. تفعيل الشركة أو الصنف يؤثر على ظهوره في القوائم.',
@@ -300,7 +300,7 @@ export const messagesAr: Record<string, string> = {
   'catalog.companySaved': 'تم حفظ الشركة.',
   'catalog.productCreated': 'تمت إضافة الصنف.',
   'catalog.productSaved': 'تم حفظ الصنف.',
-  'catalog.adminOnly': 'تعديل الكتالوج متاح لمسؤول النظام فقط (مثل تبويب WinForms).',
+  'catalog.adminOnly': 'تعديل الكتالوج متاح لمسؤول النظام فقط.',
   'catalog.uxTitle': 'طريقة الإدخال',
   'catalog.uxBody':
     'التخطيط الحالي (شركة ← ثم أصنافها) مناسب للكتالوج: يقلل التكرار ويربط كل زيت أو فلتر بالمورّد الصحيح. أزرار «النوع» و«العبوة» أسرع من القوائم المنسدلة للقيم الثابتة. للإدخال الكثيف لاحقاً يمكن إضافة استيراد CSV أو صفوف قابلة للتحرير في الجدول؛ للأسعار والكميات يبقى استلام المستودع الرئيسي هو المصدر.',

@@ -1,52 +1,39 @@
-# OilChangePOS (Isolated WinForms Solution)
+# OilChangePOS (API + React)
 
-Production-oriented desktop POS and inventory system for oil/lubricant shop.
+POS and inventory backend for oil/lubricant retail, with a **browser UI** in `web/`.
 
 ## Architecture
 
-- `OilChangePOS.WinForms` (Presentation Layer)
-- `OilChangePOS.Business` (Business Logic Layer)
-- `OilChangePOS.Data` (Data Access Layer with EF Core + SQL Server)
-- `OilChangePOS.Domain` (Entities and core types)
-- `OilChangePOS.API` (HTTP API for WinForms and other clients)
-- `web/` — **React (Vite + TypeScript)** UI in the same repo; not added to the `.sln`. See `web/README.md`.
+- `OilChangePOS.API` — ASP.NET Core HTTP API (Kestrel)
+- `OilChangePOS.Business` — business logic
+- `OilChangePOS.Data` — EF Core + SQL Server
+- `OilChangePOS.Domain` — entities and core types
+- `web/` — React (Vite + TypeScript); run separately with npm. See `web/README.md`.
 
-## Key Rules Implemented
+## Key rules
 
-- Stock accuracy is based on `StockMovements` only.
-- Every operation creates stock movement entries:
-  - Purchase => `IN`
-  - Sale => `OUT`
-  - Oil service => `OUT`
-  - Stock audit => `ADJUST`
-- Sales and service operations are transaction-safe and reject insufficient stock.
+- Stock is derived from `StockMovements`.
+- Operations create movements: purchase, sale, transfer, audit adjustment.
+- Sales reject insufficient stock inside a single transaction.
 
-## Default Credentials
+## Default credentials (seeded dev DB)
 
 - `admin` / `admin123`
 - `cashier` / `admin123`
 
-## Run Steps
+## Run (development)
 
-1. Open terminal in `OilChangePOS`.
-2. Create DB manually (optional if you prefer script-first):
-   - Execute `Database/CreateDatabase.sql` in SQL Server Management Studio.
-3. Update connection string in `OilChangePOS.WinForms/appsettings.json`.
-4. Restore and run:
-   - `dotnet restore`
-   - `dotnet run --project OilChangePOS.WinForms/OilChangePOS.WinForms.csproj`
+1. Set the connection string in `OilChangePOS.API/appsettings.json` (or user secrets).
+2. Apply EF migrations, e.g.  
+   `dotnet ef database update --project OilChangePOS.Data --startup-project OilChangePOS.Data`  
+   (or `--startup-project OilChangePOS.API` if you prefer the API host).
+3. Start the API:  
+   `dotnet run --project OilChangePOS.API/OilChangePOS.API.csproj`  
+   **Visual Studio:** Right-click **OilChangePOS.API** → **Set as Startup Project**, then F5. If debugging still says the startup project cannot be launched, close VS, delete the **`.vs`** folder beside `OilChangePOS.sln`, reopen the solution, and set **OilChangePOS.API** as the startup project again (clears a stale reference after removing another host project).
+4. Start the web app from `web/`: `npm install` then `npm run dev` (see `web/README.md`).
 
-> On startup, the app uses `EnsureCreated()` and seeds default users/products if tables are empty.
+> On first API startup, the host may seed default users/products when the database is empty (see API startup / initializer).
 
-## Sample Flow: Complete Sale + Stock Deduction
+## Sample flow: sale + stock
 
-- UI POS tab provides quantity input and discount.
-- `SalesService.CompleteSaleAsync(...)`:
-  - Validates stock from `StockMovements`
-  - Creates `Invoice` + `InvoiceItems`
-  - Creates `StockMovements` with `OUT`
-  - Commits one DB transaction
-
-## Notes
-
-- The current UI is a practical, extensible baseline for production hardening (invoice print templates, richer role checks, and advanced reporting can be layered on top).
+`SalesService.CompleteSaleAsync` validates stock, writes `Invoice` / `InvoiceItems`, and `StockMovements` (sale OUT) in one transaction.

@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Design;
 namespace OilChangePOS.Data;
 
 /// <summary>
-/// Design-time factory for EF Core CLI (migrations). Connection string matches WinForms default localdb.
+/// Design-time factory for EF Core CLI (migrations). Default connection matches API `appsettings.json` LocalDB.
 /// </summary>
 public sealed class OilChangePosDbContextFactory : IDesignTimeDbContextFactory<OilChangePosDbContext>
 {
