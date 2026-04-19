@@ -112,6 +112,15 @@ public static class DatabaseInitializer
             });
         }
 
+        var firstActiveBranch = dbContext.Warehouses.FirstOrDefault(w => w.Type == WarehouseType.Branch && w.IsActive);
+        if (firstActiveBranch is not null)
+        {
+            foreach (var u in dbContext.Users
+                         .Where(u => (u.Role == UserRole.Manager || u.Role == UserRole.Cashier) && u.HomeBranchWarehouseId == null)
+                         .ToList())
+                u.HomeBranchWarehouseId = firstActiveBranch.Id;
+        }
+
         NormalizeDemoPasswords(dbContext);
         await dbContext.SaveChangesAsync();
     }

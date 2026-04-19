@@ -1,6 +1,6 @@
 import { http } from '@/shared/api/client'
 import type { Product } from '@/entities/product'
-import { getInventorySnapshot, getProducts } from '@/shared/api/inventory.api'
+import { getBranchSalePriceOverrides, getInventorySnapshot, getProducts } from '@/shared/api/inventory.api'
 
 const usePosMock = import.meta.env.VITE_POS_MOCK === 'true' || import.meta.env.VITE_INVENTORY_MOCK === 'true'
 
@@ -74,8 +74,11 @@ async function mockDelay<T>(v: T, ms = 40): Promise<T> {
 export async function getProductsForPOS(warehouseId: number): Promise<POSProductRow[]> {
   const [products, snap] = await Promise.all([getProducts(), getInventorySnapshot(warehouseId)])
   const onHand = new Map(snap.map((r) => [r.productId, r.currentStock]))
+  const ids = products.map((p) => p.id)
+  const overrides = await getBranchSalePriceOverrides(warehouseId, ids)
   return products.map((p) => ({
     ...p,
+    unitPrice: overrides.has(p.id) ? overrides.get(p.id)! : p.unitPrice,
     barcode: padBarcode(p.id),
     quantityOnHand: onHand.get(p.id) ?? 0,
   }))

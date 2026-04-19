@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { t } from '@/i18n'
 import { http } from '@/shared/api/client'
 
 /** Canonical app roles (UI + route guards). Backend returns Admin | Manager | Cashier (legacy "Branch" → manager). */
@@ -19,7 +20,7 @@ export type AuthUser = {
 
 export type AuthSession = {
   user: AuthUser
-  /** Bearer token when API issues JWT; otherwise a client-issued opaque session id until backend is ready. */
+  /** Bearer JWT from `POST /api/Auth/login` (required for secured API routes). */
   accessToken: string
 }
 
@@ -113,11 +114,13 @@ async function loginReal(credentials: LoginCredentials): Promise<AuthSession> {
       throw new AuthApiError('Account is disabled.', 'invalid_credentials')
     }
     const token =
-      typeof data.accessToken === 'string' && data.accessToken.length > 0
-        ? data.accessToken
-        : createOpaqueSessionToken()
+      typeof data.accessToken === 'string' && data.accessToken.length > 0 ? data.accessToken : null
+    if (!token) {
+      throw new AuthApiError(t('auth.missingJwt'), 'unknown')
+    }
     return { user, accessToken: token }
   } catch (e) {
+    if (e instanceof AuthApiError) throw e
     if (axios.isAxiosError(e)) {
       if (e.response?.status === 401) {
         const msg =

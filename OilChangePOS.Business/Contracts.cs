@@ -139,6 +139,17 @@ public interface IAuthService
 /// <summary>Users with <see cref="UserRole.Manager"/> or <see cref="UserRole.Cashier"/> for admin assignment of default POS warehouse.</summary>
 public record BranchRoleUserDto(int Id, string Username, int? HomeBranchWarehouseId);
 
+/// <summary>Admin console row — includes branch display name when <see cref="HomeBranchWarehouseId"/> is set.</summary>
+public record AdminUserRowDto(int Id, string Username, string Role, bool IsActive, int? HomeBranchWarehouseId, string? HomeBranchName);
+
+public interface IUserManagementService
+{
+    Task<IReadOnlyList<AdminUserRowDto>> ListUsersAsync(int requestingUserId, CancellationToken cancellationToken = default);
+    Task<int> CreateUserAsync(int requestingUserId, string username, string password, UserRole role, int? homeBranchWarehouseId, CancellationToken cancellationToken = default);
+    Task UpdateUserAsync(int requestingUserId, int userId, UserRole role, bool isActive, int? homeBranchWarehouseId, CancellationToken cancellationToken = default);
+    Task SetPasswordAsync(int requestingUserId, int userId, string newPassword, CancellationToken cancellationToken = default);
+}
+
 public interface IWarehouseService
 {
     Task<List<WarehouseDto>> GetAllAsync(CancellationToken cancellationToken = default);

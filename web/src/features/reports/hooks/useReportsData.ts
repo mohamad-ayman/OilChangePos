@@ -6,7 +6,9 @@ import {
   getSalesSummary,
   getTopProducts,
   getTransferStats,
+  type ReportsAccess,
 } from '@/shared/api/reports.api'
+import { useAuthStore } from '@/shared/store/auth.store'
 
 const stale = 60_000
 
@@ -15,12 +17,44 @@ const stale = 60_000
  * this hook only derives KPI view-model once per snapshot.
  */
 export function useReportsData() {
+  const user = useAuthStore((s) => s.user)
+
+  const access: ReportsAccess = useMemo(
+    () => ({
+      isAdmin: user?.role === 'admin',
+      branchWarehouseId: user?.role !== 'admin' ? user?.homeBranchWarehouseId ?? null : null,
+    }),
+    [user],
+  )
+
+  const canFetchBranchScoped = access.isAdmin || access.branchWarehouseId != null
+
   const results = useQueries({
     queries: [
-      { queryKey: reportKeys.salesSummary(), queryFn: getSalesSummary, staleTime: stale },
-      { queryKey: reportKeys.inventoryStats(), queryFn: getInventoryStats, staleTime: stale },
-      { queryKey: reportKeys.transferStats(), queryFn: getTransferStats, staleTime: stale },
-      { queryKey: reportKeys.topProducts(), queryFn: getTopProducts, staleTime: stale },
+      {
+        queryKey: [...reportKeys.salesSummary(), access.isAdmin, access.branchWarehouseId],
+        queryFn: () => getSalesSummary(access),
+        staleTime: stale,
+        enabled: canFetchBranchScoped,
+      },
+      {
+        queryKey: [...reportKeys.inventoryStats(), access.isAdmin, access.branchWarehouseId],
+        queryFn: () => getInventoryStats(access),
+        staleTime: stale,
+        enabled: canFetchBranchScoped,
+      },
+      {
+        queryKey: [...reportKeys.transferStats(), access.isAdmin],
+        queryFn: () => getTransferStats(access),
+        staleTime: stale,
+        enabled: access.isAdmin && canFetchBranchScoped,
+      },
+      {
+        queryKey: [...reportKeys.topProducts(), access.isAdmin, access.branchWarehouseId],
+        queryFn: () => getTopProducts(access),
+        staleTime: stale,
+        enabled: canFetchBranchScoped,
+      },
     ],
   })
 
@@ -48,5 +82,6 @@ export function useReportsData() {
     kpis,
     loading,
     error,
+    showTransferAnalytics: access.isAdmin,
   }
 }

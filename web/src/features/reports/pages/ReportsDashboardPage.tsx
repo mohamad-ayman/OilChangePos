@@ -12,7 +12,7 @@ function money(n: number | null) {
 }
 
 export function ReportsDashboardPage() {
-  const { sales, inventory, transfers, topProducts, kpis, loading } = useReportsData()
+  const { sales, inventory, transfers, topProducts, kpis, loading, showTransferAnalytics } = useReportsData()
 
   const topRows = useMemo(() => topProducts.data?.items ?? [], [topProducts.data])
 
@@ -66,7 +66,9 @@ export function ReportsDashboardPage() {
         </aside>
       </div>
 
-      <TransferReport stats={transfers.data} loading={transfers.isPending} />
+      {showTransferAnalytics ? (
+        <TransferReport stats={transfers.data} loading={transfers.isPending} />
+      ) : null}
     </div>
   )
 }

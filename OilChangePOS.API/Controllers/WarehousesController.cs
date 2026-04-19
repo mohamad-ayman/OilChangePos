@@ -12,16 +12,40 @@ namespace OilChangePOS.API.Controllers;
 public sealed class WarehousesController(IWarehouseService warehouses) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<List<WarehouseDto>>> GetAll(CancellationToken ct) =>
-        Ok(await warehouses.GetAllAsync(ct));
+    public async Task<ActionResult<List<WarehouseDto>>> GetAll(CancellationToken ct)
+    {
+        var all = await warehouses.GetAllAsync(ct);
+        if (User.IsAdmin())
+            return Ok(all);
+        if (!User.IsBranchStaff())
+            return Ok(all);
+        var home = User.TryGetHomeBranchWarehouseId();
+        if (home is null)
+            return Ok(new List<WarehouseDto>());
+        return Ok(all.Where(w => w.Id == home.Value).ToList());
+    }
 
     [HttpGet("branches")]
-    public async Task<ActionResult<List<WarehouseDto>>> GetBranches(CancellationToken ct) =>
-        Ok(await warehouses.GetBranchesAsync(ct));
+    public async Task<ActionResult<List<WarehouseDto>>> GetBranches(CancellationToken ct)
+    {
+        var branches = await warehouses.GetBranchesAsync(ct);
+        if (User.IsAdmin())
+            return Ok(branches);
+        if (!User.IsBranchStaff())
+            return Ok(branches);
+        var home = User.TryGetHomeBranchWarehouseId();
+        if (home is null)
+            return Ok(new List<WarehouseDto>());
+        return Ok(branches.Where(b => b.Id == home.Value).ToList());
+    }
 
     [HttpGet("main")]
-    public async Task<ActionResult<WarehouseDto?>> GetMain(CancellationToken ct) =>
-        Ok(await warehouses.GetMainAsync(ct));
+    public async Task<ActionResult<WarehouseDto?>> GetMain(CancellationToken ct)
+    {
+        if (!User.IsAdmin() && User.IsBranchStaff())
+            return Ok((WarehouseDto?)null);
+        return Ok(await warehouses.GetMainAsync(ct));
+    }
 
     [HttpGet("branches-admin")]
     [Authorize(Roles = nameof(UserRole.Admin))]

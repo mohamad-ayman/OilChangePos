@@ -259,6 +259,30 @@ export async function getEffectiveSalePrice(productId: number, warehouseId: numb
   return Number(data)
 }
 
+export type BranchPriceOverrideItemView = {
+  productId: number
+  salePrice: number
+}
+
+/** Batch branch retail overrides (`POST api/Inventory/branch-overrides`) — same source as effective sale price. */
+export async function getBranchSalePriceOverrides(
+  warehouseId: number,
+  productIds: number[],
+): Promise<Map<number, number>> {
+  if (useInventoryMock || productIds.length === 0) {
+    return new Map()
+  }
+  const { data } = await http.post<BranchPriceOverrideItemView[]>('/api/Inventory/branch-overrides', {
+    warehouseId,
+    productIds,
+  })
+  const m = new Map<number, number>()
+  for (const row of data) {
+    m.set(row.productId, Number(row.salePrice))
+  }
+  return m
+}
+
 /** Warehouses for filters (`GET api/Warehouses`). */
 export async function getWarehouses(): Promise<Warehouse[]> {
   if (useInventoryMock) {

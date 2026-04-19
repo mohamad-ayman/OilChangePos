@@ -1,5 +1,5 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { useDeferredValue, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import type { Product } from '@/entities/product'
 import { inventoryKeys } from '@/features/inventory/services/inventoryQueryKeys'
 import {
@@ -10,6 +10,7 @@ import {
   getWarehouses,
   type InventorySnapshotView,
 } from '@/shared/api/inventory.api'
+import { useAuthStore } from '@/shared/store/auth.store'
 
 export type WarehouseScope = 'all' | number
 
@@ -52,7 +53,16 @@ function statusForProduct(productId: number, total: number, lowProductIds: Reado
 }
 
 export function useInventory() {
+  const user = useAuthStore((s) => s.user)
+  const canPickAllWarehouses = user?.role === 'admin'
+
   const [warehouseScope, setWarehouseScope] = useState<WarehouseScope>('all')
+
+  useEffect(() => {
+    if (!canPickAllWarehouses && user?.homeBranchWarehouseId != null) {
+      setWarehouseScope(user.homeBranchWarehouseId)
+    }
+  }, [canPickAllWarehouses, user?.homeBranchWarehouseId])
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search.trim().toLowerCase())
   const [category, setCategory] = useState<string>('all')
@@ -245,6 +255,7 @@ export function useInventory() {
 
   return {
     warehouses,
+    canPickAllWarehouses,
     warehouseScope,
     setWarehouseScope,
     search,

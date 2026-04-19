@@ -9,6 +9,12 @@ async function mockDelay<T>(v: T, ms = 50): Promise<T> {
   return v
 }
 
+/** Admins see company-wide aggregates; branch roles only their home warehouse (JWT). */
+export type ReportsAccess = {
+  isAdmin: boolean
+  branchWarehouseId: number | null
+}
+
 /** Daily bucket for sales trend charts. */
 export type SalesDailyPoint = { date: string; sales: number; profit: number; invoices: number }
 
@@ -282,12 +288,109 @@ function stableNameId(name: string): number {
   return Math.abs(h) % 1_000_000
 }
 
-async function fetchSalesSummaryLive(): Promise<SalesSummary> {
+function emptySalesSummary(): SalesSummary {
+  return {
+    totalSales: 0,
+    totalProfit: 0,
+    transactionCount: 0,
+    avgOrderValue: 0,
+    daily: [],
+    monthly: [],
+  }
+}
+
+function emptyTransferStats(): TransferStats {
+  return {
+    pendingApproval: 0,
+    approved: 0,
+    inTransit: 0,
+    completed: 0,
+    rejected: 0,
+    byBranch: [],
+    flows: [],
+  }
+}
+
+function emptyInventoryStats(): InventoryStats {
+  return {
+    stockValueTotal: 0,
+    lowStock: [],
+    valueByWarehouse: [],
+    movementFrequency: [],
+    deadStock: [],
+  }
+}
+
+async function fetchSalesSummaryLive(access: ReportsAccess): Promise<SalesSummary> {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const fromDay = addDays(today, -13)
   const fromStr = toLocalDateString(fromDay)
   const toStr = toLocalDateString(today)
+
+  if (!access.isAdmin) {
+    const whId = access.branchWarehouseId
+    if (whId == null) return emptySalesSummary()
+
+    const dailyRows = await Promise.all(
+      Array.from({ length: 14 }, (_, i) => {
+        const d = addDays(fromDay, i)
+        const dateUtc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0)).toISOString()
+        return http
+          .get<DailySalesDto>('/api/Reports/daily-sales-warehouse', { params: { dateUtc, warehouseId: whId } })
+          .then((r) => {
+            const sales = Number(r.data.totalSales ?? 0)
+            const invoices = Number(r.data.invoiceCount ?? 0)
+            const profit = Math.round(sales * 0.18)
+            return {
+              date: toLocalDateString(d),
+              sales,
+              profit,
+              invoices,
+            } satisfies SalesDailyPoint
+          })
+      }),
+    )
+
+    const [periodRes, profitRes] = await Promise.all([
+      http.get<SalesPeriodSummaryDto>('/api/Reports/sales-period-summary', {
+        params: { fromLocalDate: fromStr, toLocalDate: toStr, warehouseId: whId },
+      }),
+      http.get<ProfitRollupDto>('/api/Reports/profit-rollup', {
+        params: { fromLocalDate: fromStr, toLocalDate: toStr, warehouseId: whId },
+      }),
+    ])
+
+    const monthlyMap = new Map<string, { sales: number; profit: number; invoices: number }>()
+    for (const p of dailyRows) {
+      const month = p.date.slice(0, 7)
+      const cur = monthlyMap.get(month) ?? { sales: 0, profit: 0, invoices: 0 }
+      cur.sales += p.sales
+      cur.profit += p.profit
+      cur.invoices += p.invoices
+      monthlyMap.set(month, cur)
+    }
+    const monthly: SalesMonthlyPoint[] = [...monthlyMap.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, v]) => ({ month, ...v }))
+
+    const period = periodRes.data
+    const profit = profitRes.data
+    const totalSales = Number(period.netSales ?? 0)
+    const totalProfit = Number(profit.totalEstimatedGrossProfit ?? 0)
+    const transactionCount = Number(period.invoiceCount ?? 0)
+    const avgOrderValue =
+      transactionCount > 0 ? Math.round((totalSales / transactionCount) * 100) / 100 : Number(period.averageInvoiceValue ?? 0)
+
+    return {
+      totalSales,
+      totalProfit,
+      transactionCount,
+      avgOrderValue,
+      daily: dailyRows,
+      monthly,
+    }
+  }
 
   const dailyRows = await Promise.all(
     Array.from({ length: 14 }, (_, i) => {
@@ -347,8 +450,14 @@ async function fetchSalesSummaryLive(): Promise<SalesSummary> {
   }
 }
 
-async function fetchInventoryStatsLive(): Promise<InventoryStats> {
-  const { data: rows } = await http.get<StockFromMovementsRow[]>('/api/Reports/stock-from-movements')
+async function fetchInventoryStatsLive(access: ReportsAccess): Promise<InventoryStats> {
+  if (!access.isAdmin && access.branchWarehouseId == null) return emptyInventoryStats()
+
+  const { data: rows } = access.isAdmin
+    ? await http.get<StockFromMovementsRow[]>('/api/Reports/stock-from-movements')
+    : await http.get<StockFromMovementsRow[]>('/api/Reports/stock-from-movements', {
+        params: { warehouseId: access.branchWarehouseId! },
+      })
   const whAgg = new Map<number, { warehouseName: string; stockValue: number; skus: Set<number> }>()
   let stockValueTotal = 0
   for (const r of rows) {
@@ -389,7 +498,10 @@ async function fetchInventoryStatsLive(): Promise<InventoryStats> {
   today.setHours(0, 0, 0, 0)
   const from90 = toLocalDateString(addDays(today, -90))
   const toStr = toLocalDateString(today)
-  const branch = warehouses.find((x) => x.type === 2 && x.isActive) ?? warehouses.find((x) => x.isActive)
+  const branch =
+    !access.isAdmin && access.branchWarehouseId != null
+      ? warehouses.find((x) => x.id === access.branchWarehouseId) ?? null
+      : warehouses.find((x) => x.type === 2 && x.isActive) ?? warehouses.find((x) => x.isActive)
   let deadStock: DeadStockRow[] = []
   if (branch) {
     try {
@@ -479,14 +591,17 @@ async function fetchTransferStatsLive(): Promise<TransferStats> {
   }
 }
 
-async function fetchTopProductsLive(): Promise<TopProductsResult> {
+async function fetchTopProductsLive(access: ReportsAccess): Promise<TopProductsResult> {
+  if (!access.isAdmin && access.branchWarehouseId == null) {
+    return { periodLabel: '—', items: [] }
+  }
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const fromStr = toLocalDateString(addDays(today, -29))
   const toStr = toLocalDateString(today)
-  const { data } = await http.get<TopSellingRow[]>('/api/Reports/top-selling', {
-    params: { fromLocalDate: fromStr, toLocalDate: toStr, take: 15 },
-  })
+  const params: Record<string, string | number> = { fromLocalDate: fromStr, toLocalDate: toStr, take: 15 }
+  if (!access.isAdmin) params.warehouseId = access.branchWarehouseId!
+  const { data } = await http.get<TopSellingRow[]>('/api/Reports/top-selling', { params })
   const items: TopProductRow[] = data.map((row, i) => ({
     rank: i + 1,
     productId: stableNameId(row.productName),
@@ -498,27 +613,28 @@ async function fetchTopProductsLive(): Promise<TopProductsResult> {
 }
 
 /** Sales KPIs + charts — backed by `daily-sales`, `sales-period-summary`, and `profit-rollup`. */
-export async function getSalesSummary(): Promise<SalesSummary> {
+export async function getSalesSummary(access: ReportsAccess): Promise<SalesSummary> {
   if (useReportsMock) return mockDelay(mockSalesSummary())
-  return fetchSalesSummaryLive()
+  return fetchSalesSummaryLive(access)
 }
 
 /** Inventory valuation + low stock — `stock-from-movements` + per-warehouse `low-stock`. */
-export async function getInventoryStats(): Promise<InventoryStats> {
+export async function getInventoryStats(access: ReportsAccess): Promise<InventoryStats> {
   if (useReportsMock) return mockDelay(mockInventoryStats())
-  return fetchInventoryStatsLive()
+  return fetchInventoryStatsLive(access)
 }
 
 /**
- * Transfer volume — `GET /api/Reports/transfers` (immediate stock postings; no approval pipeline in API).
+ * Transfer volume — `GET /api/Reports/transfers` (admin-only on API; branch UI omits this aggregate).
  */
-export async function getTransferStats(): Promise<TransferStats> {
+export async function getTransferStats(access: ReportsAccess): Promise<TransferStats> {
   if (useReportsMock) return mockDelay(mockTransferStats())
+  if (!access.isAdmin) return emptyTransferStats()
   return fetchTransferStatsLive()
 }
 
 /** Top sellers — `GET /api/Reports/top-selling`. */
-export async function getTopProducts(): Promise<TopProductsResult> {
+export async function getTopProducts(access: ReportsAccess): Promise<TopProductsResult> {
   if (useReportsMock) return mockDelay(mockTopProducts())
-  return fetchTopProductsLive()
+  return fetchTopProductsLive(access)
 }

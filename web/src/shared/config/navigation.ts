@@ -91,7 +91,7 @@ export const navigationSections: NavSection[] = [
         labelKey: 'nav.mainWarehouse',
         path: '/app/inventory',
         icon: 'placeholder',
-        allowedRoles: ['admin', 'manager'],
+        allowedRoles: ['admin'],
       },
       {
         id: 'stock-balances',
@@ -100,11 +100,11 @@ export const navigationSections: NavSection[] = [
         icon: 'placeholder',
         allowedRoles: ['admin', 'manager'],
       },
-      { id: 'products', labelKey: 'nav.products', path: '/app/products', icon: 'placeholder', allowedRoles: ['admin', 'manager'] },
+      { id: 'products', labelKey: 'nav.products', path: '/app/products', icon: 'placeholder', allowedRoles: ['admin'] },
 
-      { id: 'transfers', labelKey: 'nav.transfers', path: '/app/transfers', icon: 'placeholder', allowedRoles: ['admin', 'manager'] },
+      { id: 'transfers', labelKey: 'nav.transfers', path: '/app/transfers', icon: 'placeholder', allowedRoles: ['admin'] },
 
-      { id: 'purchases', labelKey: 'nav.purchases', path: '/app/purchases', icon: 'placeholder', allowedRoles: ['admin', 'manager'] },
+      { id: 'purchases', labelKey: 'nav.purchases', path: '/app/purchases', icon: 'placeholder', allowedRoles: ['admin'] },
 
     ],
 

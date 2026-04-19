@@ -54,6 +54,8 @@ export const messagesAr: Record<string, string> = {
   'auth.accountDisabled': 'الحساب معطّل.',
   'auth.network': 'تعذّر الاتصال بالخادم.',
   'auth.loginFailed': 'فشل تسجيل الدخول.',
+  'auth.missingJwt':
+    'الخادم لم يُرجع رمز JWT. أوقف عملية OilChangePOS.API ثم نفّذ dotnet build وأعد التشغيل، ثم سجّل الدخول من جديد.',
 
   // Dashboard / placeholders
   'dashboard.title': 'لوحة التحكم',
@@ -65,6 +67,39 @@ export const messagesAr: Record<string, string> = {
   'module.purchases.desc': 'هذا القسم مخصص لوحدة المشتريات.',
   'module.users.title': 'المستخدمون',
   'module.users.desc': 'هذا القسم مخصص لوحدة المستخدمين.',
+
+  // Admin — users & branches (server-enforced RBAC)
+  'admin.title': 'إدارة المستخدمين والفروع',
+  'admin.hintServerAuthority': 'الخادم هو المرجع الوحيد: الصلاحيات والفروع تُفرض على الواجهة البرمجية وليس على الواجهة فقط.',
+  'admin.usersHeading': 'المستخدمون',
+  'admin.branchesHeading': 'الفروع (مواقع)',
+  'admin.branchesHint': 'إنشاء فرع جديد أو تعديل الاسم وحالة التفعيل. التحويلات والمخزون يستخدمان هذه السجلات.',
+  'admin.addUser': 'مستخدم جديد',
+  'admin.username': 'اسم المستخدم',
+  'admin.password': 'كلمة المرور',
+  'admin.newPassword': 'كلمة المرور الجديدة',
+  'admin.role': 'الدور',
+  'admin.branch': 'الفرع',
+  'admin.selectBranch': '— اختر الفرع —',
+  'admin.active': 'نشط',
+  'admin.yes': 'نعم',
+  'admin.no': 'لا',
+  'admin.actions': 'إجراءات',
+  'admin.colId': 'المعرّف',
+  'admin.edit': 'تعديل',
+  'admin.save': 'حفظ',
+  'admin.saved': 'تم الحفظ.',
+  'admin.passwordUpdated': 'تم تحديث كلمة المرور.',
+  'admin.resetPassword': 'تغيير كلمة المرور',
+  'admin.resetPasswordTitle': 'تعيين كلمة مرور جديدة',
+  'admin.savePassword': 'حفظ كلمة المرور',
+  'admin.createUserSubmit': 'إنشاء المستخدم',
+  'admin.createBranch': 'إنشاء فرع',
+  'admin.newBranchName': 'اسم الفرع الجديد',
+  'admin.branchName': 'اسم الفرع',
+  'admin.editUserTitle': 'تعديل المستخدم',
+  'admin.mustSelectBranch': 'يجب اختيار فرع لمدير الفرع أو الكاشير.',
+  'admin.errorGeneric': 'تعذّر تنفيذ العملية.',
 
   // Not found
   'nf.title': 'الصفحة غير موجودة',

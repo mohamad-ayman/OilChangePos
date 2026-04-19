@@ -52,7 +52,7 @@ export function InventoryPage() {
             }}
             className="h-8 rounded border border-slate-300 bg-slate-100 px-2 text-xs text-slate-800"
           >
-            <option value="all">{t('inv.allWarehouses')}</option>
+            {inv.canPickAllWarehouses ? <option value="all">{t('inv.allWarehouses')}</option> : null}
             {inv.warehouses.map((w) => (
               <option key={w.id} value={String(w.id)}>
                 {w.name}

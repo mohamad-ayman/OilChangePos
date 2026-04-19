@@ -1620,15 +1620,16 @@ public class AuthService(IDbContextFactory<OilChangePosDbContext> dbFactory) : I
         if (target.Role != UserRole.Manager && target.Role != UserRole.Cashier)
             throw new InvalidOperationException("يُحدَّد فرع الدخول لمستخدمي صلاحية الفرع (مدير فرع / كاشير) فقط.");
 
-        if (homeBranchWarehouseId is { } wid)
-        {
-            var wh = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == wid, cancellationToken)
-                ?? throw new InvalidOperationException("المستودع غير موجود.");
-            if (wh.Type != WarehouseType.Branch)
-                throw new InvalidOperationException("فرع الدخول يجب أن يكون مستودع فرع.");
-            if (!wh.IsActive)
-                throw new InvalidOperationException("لا يمكن ربط مستخدم بفرع معطّل.");
-        }
+        if (!homeBranchWarehouseId.HasValue)
+            throw new InvalidOperationException("يجب تعيين فرع لمستخدمي الفرع (مدير فرع / كاشير).");
+
+        var wid = homeBranchWarehouseId.Value;
+        var wh = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == wid, cancellationToken)
+            ?? throw new InvalidOperationException("المستودع غير موجود.");
+        if (wh.Type != WarehouseType.Branch)
+            throw new InvalidOperationException("فرع الدخول يجب أن يكون مستودع فرع.");
+        if (!wh.IsActive)
+            throw new InvalidOperationException("لا يمكن ربط مستخدم بفرع معطّل.");
 
         target.HomeBranchWarehouseId = homeBranchWarehouseId;
         await db.SaveChangesAsync(cancellationToken);

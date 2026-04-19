@@ -277,6 +277,11 @@ public partial class MainForm
         int? home = null;
         if (_branchLoginWarehouseCombo.SelectedItem is WarehouseDto wh && wh.Id > 0)
             home = wh.Id;
+        if (!home.HasValue)
+        {
+            MessageBox.Show("اختر فرعاً للمستخدم (مطلوب لمدير الفرع / الكاشير).", "الفروع", MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, MsgRtl);
+            return;
+        }
 
         try
         {

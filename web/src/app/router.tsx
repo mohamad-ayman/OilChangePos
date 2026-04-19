@@ -17,9 +17,11 @@ import {
   TransfersPage,
 } from '@/features/transfers'
 import { ProtectedRoute } from '@/app/router/ProtectedRoute'
+import { RequireRole } from '@/app/router/RequireRole'
 import { LoginPage } from '@/pages/LoginPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { CatalogPage } from '@/features/catalog/pages/CatalogPage'
+import { AdminUsersPage } from '@/features/admin/pages/AdminUsersPage'
 
 const router = createBrowserRouter([
   {
@@ -36,22 +38,27 @@ const router = createBrowserRouter([
             children: [
               { index: true, element: <ShellDashboardPage /> },
               { path: 'pos', element: <POSPage /> },
-              { path: 'inventory', element: <MainWarehousePage /> },
               { path: 'stock-balances', element: <InventoryPage /> },
-              { path: 'products', element: <CatalogPage /> },
+              { path: 'reports', element: <ReportsDashboardPage /> },
               {
-                path: 'transfers',
-                element: <TransfersLayout />,
+                element: <RequireRole allowedRoles={['admin']} />,
                 children: [
-                  { path: 'requests', element: <TransfersPage /> },
-                  { path: 'workflow/new', element: <CreateTransferWizard /> },
-                  { path: 'workflow/:transferId', element: <TransferDetailsPage /> },
-                  { index: true, element: <DirectTransferPage /> },
+                  { path: 'inventory', element: <MainWarehousePage /> },
+                  { path: 'products', element: <CatalogPage /> },
+                  {
+                    path: 'transfers',
+                    element: <TransfersLayout />,
+                    children: [
+                      { path: 'requests', element: <TransfersPage /> },
+                      { path: 'workflow/new', element: <CreateTransferWizard /> },
+                      { path: 'workflow/:transferId', element: <TransferDetailsPage /> },
+                      { index: true, element: <DirectTransferPage /> },
+                    ],
+                  },
+                  { path: 'purchases', element: <ShellModulePlaceholder moduleId="purchases" /> },
+                  { path: 'users', element: <AdminUsersPage /> },
                 ],
               },
-              { path: 'purchases', element: <ShellModulePlaceholder moduleId="purchases" /> },
-              { path: 'reports', element: <ReportsDashboardPage /> },
-              { path: 'users', element: <ShellModulePlaceholder moduleId="users" /> },
               { path: '*', element: <NotFoundPage /> },
             ],
           },
