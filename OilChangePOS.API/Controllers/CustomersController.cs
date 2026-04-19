@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OilChangePOS.Business;
 
@@ -5,6 +6,7 @@ namespace OilChangePOS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public sealed class CustomersController(ICustomerService customers) : ControllerBase
 {
     [HttpGet]

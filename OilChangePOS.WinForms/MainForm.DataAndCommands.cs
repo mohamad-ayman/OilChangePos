@@ -183,7 +183,7 @@ public partial class MainForm : Form
         if (TryGetWarehouseIdFromCombo(_inventoryWarehouseCombo, out var fromInventory)) return (true, fromInventory);
         if (TryGetWarehouseIdFromCombo(_posWarehouseCombo, out var fromPos)) return (true, fromPos);
         var branches = await _warehouseService.GetBranchesAsync();
-        if (_currentUser.Role == UserRole.Branch && _currentUser.HomeBranchWarehouseId is { } homeId
+        if (_currentUser.Role.IsBranchStaff() && _currentUser.HomeBranchWarehouseId is { } homeId
             && branches.Any(b => b.Id == homeId))
             return (true, homeId);
         if (branches.FirstOrDefault() is { } b) return (true, b.Id);
@@ -193,7 +193,7 @@ public partial class MainForm : Form
     /// <summary>Branch-role users can pin a default active branch; otherwise the first active branch by name is used.</summary>
     private WarehouseDto? ResolvePreferredBranchForCurrentUser(IReadOnlyList<WarehouseDto> activeBranches, IReadOnlyList<WarehouseDto>? allWarehouses = null)
     {
-        if (_currentUser.Role == UserRole.Branch && _currentUser.HomeBranchWarehouseId is { } hid)
+        if (_currentUser.Role.IsBranchStaff() && _currentUser.HomeBranchWarehouseId is { } hid)
         {
             var hit = activeBranches.FirstOrDefault(b => b.Id == hid);
             if (hit is not null)
@@ -479,7 +479,7 @@ public partial class MainForm : Form
     {
         if (TryGetWarehouseIdFromCombo(_inventoryWarehouseCombo, out var id)) return id;
         var branches = await _warehouseService.GetBranchesAsync();
-        if (_currentUser.Role == UserRole.Branch && _currentUser.HomeBranchWarehouseId is { } homeId
+        if (_currentUser.Role.IsBranchStaff() && _currentUser.HomeBranchWarehouseId is { } homeId
             && branches.Any(b => b.Id == homeId))
             return homeId;
         if (branches.FirstOrDefault() is { } b) return b.Id;

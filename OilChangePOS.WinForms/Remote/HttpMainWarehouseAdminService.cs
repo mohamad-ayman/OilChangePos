@@ -31,7 +31,8 @@ internal sealed class HttpMainWarehouseAdminService(HttpClient http) : IMainWare
 
     public async Task<int> ImportExcelLinesAsync(int userId, int mainWarehouseId, IReadOnlyList<MainWarehouseExcelImportLineDto> lines, CancellationToken cancellationToken = default)
     {
-        var body = new { userId, mainWarehouseId, lines };
+        _ = userId;
+        var body = new { mainWarehouseId, lines };
         using var res = await http.PostAsJsonAsync("api/main-warehouse/import", body, OilChangeJson.Options, cancellationToken);
         return await ApiHttp.ReadFromJsonAsync<int>(res, cancellationToken);
     }

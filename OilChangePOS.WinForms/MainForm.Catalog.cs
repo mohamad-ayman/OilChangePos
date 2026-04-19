@@ -52,7 +52,7 @@ public partial class MainForm : Form
         _catalogProductTypeCombo.Items.AddRange(["Oil", "Filter", "Grease", "Other"]);
         _catalogProductTypeCombo.SelectedIndex = 0;
         _catalogProductPackCombo.Items.Clear();
-        _catalogProductPackCombo.Items.AddRange(["4L", "5L", "20L", "Unit"]);
+        _catalogProductPackCombo.Items.AddRange(["1L", "4L", "5L", "16L", "20L", "Unit"]);
         _catalogProductPackCombo.SelectedIndex = 0;
 
         foreach (var c in new Control[] { _catalogCompanyNameEdit, _catalogProductNameEdit, _catalogProductTypeCombo, _catalogProductPackCombo })

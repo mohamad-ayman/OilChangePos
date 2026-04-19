@@ -1,10 +1,14 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OilChangePOS.API.Security;
 using OilChangePOS.Business;
+using OilChangePOS.Domain;
 
 namespace OilChangePOS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public sealed class WarehousesController(IWarehouseService warehouses) : ControllerBase
 {
     [HttpGet]
@@ -20,21 +24,30 @@ public sealed class WarehousesController(IWarehouseService warehouses) : Control
         Ok(await warehouses.GetMainAsync(ct));
 
     [HttpGet("branches-admin")]
+    [Authorize(Roles = nameof(UserRole.Admin))]
     public async Task<ActionResult<List<WarehouseDto>>> ListBranchesAdmin(CancellationToken ct) =>
         Ok(await warehouses.ListBranchesForAdminAsync(ct));
 
-    public sealed record CreateBranchBody(string Name, int AdminUserId);
+    public sealed record CreateBranchBody(string Name);
 
     [HttpPost("branches")]
-    public async Task<ActionResult<int>> CreateBranch([FromBody] CreateBranchBody body, CancellationToken ct) =>
-        Ok(await warehouses.CreateBranchAsync(body.Name, body.AdminUserId, ct));
+    [Authorize(Roles = nameof(UserRole.Admin))]
+    public async Task<ActionResult<int>> CreateBranch([FromBody] CreateBranchBody body, CancellationToken ct)
+    {
+        if (!this.TryGetRequiredUserId(out var actorId))
+            return Unauthorized();
+        return Ok(await warehouses.CreateBranchAsync(body.Name, actorId, ct));
+    }
 
-    public sealed record UpdateBranchBody(string Name, bool IsActive, int AdminUserId);
+    public sealed record UpdateBranchBody(string Name, bool IsActive);
 
     [HttpPut("branches/{branchWarehouseId:int}")]
+    [Authorize(Roles = nameof(UserRole.Admin))]
     public async Task<IActionResult> UpdateBranch(int branchWarehouseId, [FromBody] UpdateBranchBody body, CancellationToken ct)
     {
-        await warehouses.UpdateBranchAsync(branchWarehouseId, body.Name, body.IsActive, body.AdminUserId, ct);
+        if (!this.TryGetRequiredUserId(out var actorId))
+            return Unauthorized();
+        await warehouses.UpdateBranchAsync(branchWarehouseId, body.Name, body.IsActive, actorId, ct);
         return NoContent();
     }
 }

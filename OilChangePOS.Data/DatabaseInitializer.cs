@@ -63,11 +63,11 @@ public static class DatabaseInitializer
         {
             dbContext.Users.AddRange(
                 new AppUser { Username = "admin", PasswordHash = HashPassword("admin"), Role = UserRole.Admin },
-                new AppUser { Username = "branch", PasswordHash = HashPassword("branch"), Role = UserRole.Branch });
+                new AppUser { Username = "branch", PasswordHash = HashPassword("branch"), Role = UserRole.Manager });
         }
         else if (!dbContext.Users.Any(u => u.Username == "branch"))
         {
-            dbContext.Users.Add(new AppUser { Username = "branch", PasswordHash = HashPassword("branch"), Role = UserRole.Branch });
+            dbContext.Users.Add(new AppUser { Username = "branch", PasswordHash = HashPassword("branch"), Role = UserRole.Manager });
         }
 
         // GetMainAsync() requires an active row with Type == Main. Empty DB, deleted mains, or only branches → add/fix.
@@ -94,6 +94,22 @@ public static class DatabaseInitializer
             dbContext.Customers.AddRange(
                 new Customer { FullName = "Fleet / B2B Account", PhoneNumber = "0500000001" },
                 new Customer { FullName = "Retail Customer", PhoneNumber = "0500000002" });
+        }
+
+        var demoBranchId = dbContext.Warehouses
+            .Where(w => w.Type == WarehouseType.Branch && w.IsActive)
+            .OrderBy(w => w.Id)
+            .Select(w => (int?)w.Id)
+            .FirstOrDefault();
+        if (demoBranchId is { } branchWhId && !dbContext.Users.Any(u => u.Username == "cashier"))
+        {
+            dbContext.Users.Add(new AppUser
+            {
+                Username = "cashier",
+                PasswordHash = HashPassword("branch"),
+                Role = UserRole.Cashier,
+                HomeBranchWarehouseId = branchWhId
+            });
         }
 
         NormalizeDemoPasswords(dbContext);

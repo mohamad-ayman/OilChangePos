@@ -32,14 +32,16 @@ internal sealed class HttpWarehouseService(HttpClient http) : IWarehouseService
 
     public async Task<int> CreateBranchAsync(string name, int adminUserId, CancellationToken cancellationToken = default)
     {
-        var body = new { name, adminUserId };
+        _ = adminUserId;
+        var body = new { name };
         using var res = await http.PostAsJsonAsync("api/Warehouses/branches", body, OilChangeJson.Options, cancellationToken);
         return await ApiHttp.ReadFromJsonAsync<int>(res, cancellationToken);
     }
 
     public async Task UpdateBranchAsync(int branchWarehouseId, string name, bool isActive, int adminUserId, CancellationToken cancellationToken = default)
     {
-        var body = new { name, isActive, adminUserId };
+        _ = adminUserId;
+        var body = new { name, isActive };
         using var res = await http.PutAsJsonAsync($"api/Warehouses/branches/{branchWarehouseId}", body, OilChangeJson.Options, cancellationToken);
         await ApiHttp.EnsureSuccessAsync(res, cancellationToken);
     }

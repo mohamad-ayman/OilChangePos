@@ -132,11 +132,11 @@ public interface ICustomerService
 public interface IAuthService
 {
     Task<AppUser?> LoginAsync(string username, string password, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<BranchRoleUserDto>> ListBranchRoleUsersAsync(int adminUserId, CancellationToken cancellationToken = default);
-    Task SetUserHomeBranchWarehouseAsync(int adminUserId, int targetUserId, int? homeBranchWarehouseId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BranchRoleUserDto>> ListBranchRoleUsersAsync(int requestingUserId, CancellationToken cancellationToken = default);
+    Task SetUserHomeBranchWarehouseAsync(int requestingUserId, int targetUserId, int? homeBranchWarehouseId, CancellationToken cancellationToken = default);
 }
 
-/// <summary>Users with <see cref="UserRole.Branch"/> for admin assignment of default POS warehouse.</summary>
+/// <summary>Users with <see cref="UserRole.Manager"/> or <see cref="UserRole.Cashier"/> for admin assignment of default POS warehouse.</summary>
 public record BranchRoleUserDto(int Id, string Username, int? HomeBranchWarehouseId);
 
 public interface IWarehouseService

@@ -8,6 +8,8 @@ Production-oriented desktop POS and inventory system for oil/lubricant shop.
 - `OilChangePOS.Business` (Business Logic Layer)
 - `OilChangePOS.Data` (Data Access Layer with EF Core + SQL Server)
 - `OilChangePOS.Domain` (Entities and core types)
+- `OilChangePOS.API` (HTTP API for WinForms and other clients)
+- `web/` — **React (Vite + TypeScript)** UI in the same repo; not added to the `.sln`. See `web/README.md`.
 
 ## Key Rules Implemented
 

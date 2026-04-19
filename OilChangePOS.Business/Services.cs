@@ -203,10 +203,16 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
     public async Task<StockAuditResultDto> RunStockAuditAsync(int userId, int warehouseId, List<AuditLineRequest> lines, string notes, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
-            ?? throw new InvalidOperationException("المستخدم غير موجود.");
-        if (actor.Role != UserRole.Admin)
-            throw new InvalidOperationException("المسؤولون فقط يمكنهم تنفيذ جرد المخزون.");
+        var actor = await RbacRules.RequireUserAsync(db, userId, cancellationToken);
+        var warehouse = await RbacRules.RequireWarehouseAsync(db, warehouseId, cancellationToken);
+        if (actor.Role.IsAdmin())
+        {
+            // admin may audit any warehouse
+        }
+        else if (actor.Role.IsBranchStaff())
+            RbacRules.EnsureBranchStockAudit(actor, warehouse);
+        else
+            throw new InvalidOperationException("لا يُسمح بتنفيذ جرد المخزون لهذا الدور.");
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
         var audit = new StockAudit
         {
@@ -335,12 +341,10 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
         if (salePrice < 0)
             throw new InvalidOperationException("سعر البيع لا يمكن أن يكون سالباً.");
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        _ = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
-            ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        var actor = await RbacRules.RequireUserAsync(db, userId, cancellationToken);
         var warehouse = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == warehouseId, cancellationToken)
             ?? throw new InvalidOperationException("المستودع غير موجود.");
-        if (warehouse.Type != WarehouseType.Branch)
-            throw new InvalidOperationException("سعر البيع للفرع يُحدّد لمستودعات الفروع فقط.");
+        RbacRules.EnsureBranchInventoryOrPricing(actor, warehouse);
         _ = await db.Products.FirstOrDefaultAsync(x => x.Id == productId, cancellationToken)
             ?? throw new InvalidOperationException($"الصنف {productId} غير موجود.");
 
@@ -363,12 +367,10 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
     public async Task DeleteBranchSalePriceAsync(int userId, int warehouseId, int productId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        _ = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
-            ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        var actor = await RbacRules.RequireUserAsync(db, userId, cancellationToken);
         var warehouse = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == warehouseId, cancellationToken)
             ?? throw new InvalidOperationException("المستودع غير موجود.");
-        if (warehouse.Type != WarehouseType.Branch)
-            throw new InvalidOperationException("سعر البيع للفرع يُحدّد لمستودعات الفروع فقط.");
+        RbacRules.EnsureBranchInventoryOrPricing(actor, warehouse);
 
         var row = await db.BranchProductPrices.FirstOrDefaultAsync(x => x.WarehouseId == warehouseId && x.ProductId == productId, cancellationToken);
         if (row is null)
@@ -552,6 +554,9 @@ public class SalesService(IDbContextFactory<OilChangePosDbContext> dbFactory) : 
         if (!request.Items.Any()) throw new InvalidOperationException("يجب أن تحتوي الفاتورة على صنف واحد على الأقل.");
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var actor = await RbacRules.RequireUserAsync(db, request.UserId, cancellationToken);
+        var saleWarehouse = await RbacRules.RequireWarehouseAsync(db, request.WarehouseId, cancellationToken);
+        RbacRules.EnsurePosSaleWarehouse(actor, saleWarehouse);
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
         var productIds = request.Items.Select(x => x.ProductId).Distinct().ToList();
         var products = await db.Products.Where(x => productIds.Contains(x.Id) && x.IsActive).ToDictionaryAsync(x => x.Id, cancellationToken);
@@ -620,6 +625,9 @@ public class ServiceOrderService(IDbContextFactory<OilChangePosDbContext> dbFact
     public async Task<int> CreateOilChangeServiceAsync(OilChangeRequest request, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var actor = await RbacRules.RequireUserAsync(db, request.UserId, cancellationToken);
+        var saleWarehouse = await RbacRules.RequireWarehouseAsync(db, request.WarehouseId, cancellationToken);
+        RbacRules.EnsurePosSaleWarehouse(actor, saleWarehouse);
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
         var warehouseId = request.WarehouseId;
         var productIds = request.Details.Select(x => x.ProductId).Distinct().ToList();
@@ -1463,6 +1471,8 @@ public class ExpenseService(IDbContextFactory<OilChangePosDbContext> dbFactory) 
 
         var utc = TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(expenseDateLocal.Date, DateTimeKind.Unspecified), TimeZoneInfo.Local);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var actor = await RbacRules.RequireUserAsync(db, userId, cancellationToken);
+        RbacRules.EnsureExpenseForActor(actor, warehouseId);
         var e = new Expense
         {
             Amount = amount,
@@ -1595,7 +1605,7 @@ public class AuthService(IDbContextFactory<OilChangePosDbContext> dbFactory) : I
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         await AssertAuthAdminAsync(db, adminUserId, cancellationToken);
         return await db.Users.AsNoTracking()
-            .Where(x => x.Role == UserRole.Branch)
+            .Where(x => x.Role == UserRole.Manager || x.Role == UserRole.Cashier)
             .OrderBy(x => x.Username)
             .Select(x => new BranchRoleUserDto(x.Id, x.Username, x.HomeBranchWarehouseId))
             .ToListAsync(cancellationToken);
@@ -1607,8 +1617,8 @@ public class AuthService(IDbContextFactory<OilChangePosDbContext> dbFactory) : I
         await AssertAuthAdminAsync(db, adminUserId, cancellationToken);
         var target = await db.Users.FirstOrDefaultAsync(x => x.Id == targetUserId, cancellationToken)
             ?? throw new InvalidOperationException("المستخدم غير موجود.");
-        if (target.Role != UserRole.Branch)
-            throw new InvalidOperationException("يُحدَّد فرع الدخول لمستخدمي صلاحية «فرع» فقط.");
+        if (target.Role != UserRole.Manager && target.Role != UserRole.Cashier)
+            throw new InvalidOperationException("يُحدَّد فرع الدخول لمستخدمي صلاحية الفرع (مدير فرع / كاشير) فقط.");
 
         if (homeBranchWarehouseId is { } wid)
         {

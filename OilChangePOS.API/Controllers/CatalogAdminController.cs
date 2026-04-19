@@ -1,10 +1,13 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OilChangePOS.Business;
+using OilChangePOS.Domain;
 
 namespace OilChangePOS.API.Controllers;
 
 [ApiController]
 [Route("api/catalog-admin")]
+[Authorize(Roles = nameof(UserRole.Admin))]
 public sealed class CatalogAdminController(ICatalogAdminService catalog) : ControllerBase
 {
     [HttpGet("companies")]

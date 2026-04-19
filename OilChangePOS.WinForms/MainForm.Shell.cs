@@ -238,7 +238,13 @@ public partial class MainForm : Form
             Close();
         };
 
-        var userCaps = _currentUser.Role == UserRole.Admin ? "مدير" : "فرع";
+        var userCaps = _currentUser.Role == UserRole.Admin
+            ? "مدير"
+            : _currentUser.Role == UserRole.Manager
+                ? "مدير فرع"
+                : _currentUser.Role == UserRole.Cashier
+                    ? "كاشير"
+                    : "فرع";
         var userLine = new Label
         {
             AutoSize = true,

@@ -13,4 +13,6 @@ public sealed class UserInfoResponse
     public string Role { get; set; } = string.Empty;
     public bool IsActive { get; set; }
     public int? HomeBranchWarehouseId { get; set; }
+    /// <summary>Bearer access token (JWT). Clients must send <c>Authorization: Bearer …</c> on subsequent API calls.</summary>
+    public string AccessToken { get; set; } = string.Empty;
 }

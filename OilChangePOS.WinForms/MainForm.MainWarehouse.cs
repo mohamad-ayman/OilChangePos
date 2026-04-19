@@ -79,7 +79,13 @@ public partial class MainForm
         // Form + grid stack scroll together when the window is short (same idea as analytics tabs).
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
-        var roleAr = _currentUser.Role == UserRole.Admin ? "مدير" : "فرع";
+        var roleAr = _currentUser.Role == UserRole.Admin
+            ? "مدير"
+            : _currentUser.Role == UserRole.Manager
+                ? "مدير فرع"
+                : _currentUser.Role == UserRole.Cashier
+                    ? "كاشير"
+                    : "فرع";
         var headerPanel = BuildStandardModuleHeaderCard(
             "المستودع الرئيسي — المشتريات والدفعات",
             $"المستخدم: {_currentUser.Username}   ·   {roleAr}",

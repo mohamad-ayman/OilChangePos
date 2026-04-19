@@ -1,4 +1,4 @@
-﻿using ClosedXML.Excel;
+using ClosedXML.Excel;
 using OilChangePOS.Business;
 using OilChangePOS.Domain;
 using System.Globalization;
@@ -130,7 +130,7 @@ public partial class MainForm : Form
         _newProductType.Items.AddRange(["Oil", "Filter", "Grease", "Other"]);
         _newProductType.SelectedIndex = 0;
         _newProductPackageSize.Items.Clear();
-        _newProductPackageSize.Items.AddRange(["4L", "5L", "20L", "Unit"]);
+        _newProductPackageSize.Items.AddRange(["1L", "4L", "5L", "16L", "20L", "Unit"]);
         _newProductPackageSize.SelectedIndex = 0;
         _chooseImageButton.Click += (_, _) => ChooseNewProductImage();
         var addProductButton = BuildButton("إضافة صنف", Color.FromArgb(39, 174, 96));

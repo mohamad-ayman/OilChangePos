@@ -13,6 +13,7 @@ internal sealed class HttpAuthService(HttpClient http) : IAuthService
         public string Role { get; set; } = string.Empty;
         public bool IsActive { get; set; }
         public int? HomeBranchWarehouseId { get; set; }
+        public string? AccessToken { get; set; }
     }
 
     public async Task<AppUser?> LoginAsync(string username, string password, CancellationToken cancellationToken = default)
@@ -23,26 +24,37 @@ internal sealed class HttpAuthService(HttpClient http) : IAuthService
         await ApiHttp.EnsureSuccessAsync(res, cancellationToken);
         var dto = await res.Content.ReadFromJsonAsync<LoginResponseDto>(OilChangeJson.Options, cancellationToken)
                   ?? throw new InvalidOperationException("Login response was empty.");
+        if (!string.IsNullOrWhiteSpace(dto.AccessToken))
+            ApiAuthSession.AccessToken = dto.AccessToken;
         return new AppUser
         {
             Id = dto.Id,
             Username = dto.Username,
             PasswordHash = string.Empty,
-            Role = Enum.Parse<UserRole>(dto.Role, true),
+            Role = MapRole(dto.Role),
             IsActive = dto.IsActive,
             HomeBranchWarehouseId = dto.HomeBranchWarehouseId
         };
     }
 
+    private static UserRole MapRole(string role)
+    {
+        if (string.Equals(role, "Branch", StringComparison.OrdinalIgnoreCase))
+            return UserRole.Manager;
+        return Enum.Parse<UserRole>(role, true);
+    }
+
     public async Task<IReadOnlyList<BranchRoleUserDto>> ListBranchRoleUsersAsync(int adminUserId, CancellationToken cancellationToken = default)
     {
-        using var res = await http.GetAsync($"api/Auth/branch-users?adminUserId={adminUserId}", cancellationToken);
+        _ = adminUserId;
+        using var res = await http.GetAsync("api/Auth/branch-users", cancellationToken);
         return await ApiHttp.ReadFromJsonAsync<List<BranchRoleUserDto>>(res, cancellationToken);
     }
 
     public async Task SetUserHomeBranchWarehouseAsync(int adminUserId, int targetUserId, int? homeBranchWarehouseId, CancellationToken cancellationToken = default)
     {
-        var body = new { adminUserId, targetUserId, homeBranchWarehouseId };
+        _ = adminUserId;
+        var body = new { targetUserId, homeBranchWarehouseId };
         using var res = await http.PostAsJsonAsync("api/Auth/user-home-branch", body, OilChangeJson.Options, cancellationToken);
         await ApiHttp.EnsureSuccessAsync(res, cancellationToken);
     }

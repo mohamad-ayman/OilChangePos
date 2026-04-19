@@ -79,14 +79,17 @@ internal static class Program
 
         var services = new ServiceCollection();
         services.Configure<OilChangeApiOptions>(configuration.GetSection(OilChangeApiOptions.SectionName));
-        services.AddHttpClient(HttpClientName, (sp, client) =>
-        {
-            var opt = sp.GetRequiredService<IOptions<OilChangeApiOptions>>().Value;
-            var url = string.IsNullOrWhiteSpace(opt.BaseUrl) ? baseUrl : opt.BaseUrl.Trim();
-            if (!url.EndsWith('/')) url += "/";
-            client.BaseAddress = new Uri(url, UriKind.Absolute);
-            client.Timeout = TimeSpan.FromMinutes(2);
-        });
+        services.AddTransient<BearerAuthHandler>();
+        services.AddHttpClient(HttpClientName)
+            .AddHttpMessageHandler<BearerAuthHandler>()
+            .ConfigureHttpClient((sp, client) =>
+            {
+                var opt = sp.GetRequiredService<IOptions<OilChangeApiOptions>>().Value;
+                var url = string.IsNullOrWhiteSpace(opt.BaseUrl) ? baseUrl : opt.BaseUrl.Trim();
+                if (!url.EndsWith('/')) url += "/";
+                client.BaseAddress = new Uri(url, UriKind.Absolute);
+                client.Timeout = TimeSpan.FromMinutes(2);
+            });
 
         services.AddScoped<IInventoryService>(sp => new HttpInventoryService(sp.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName)));
         services.AddScoped<IReportService>(sp => new HttpReportService(sp.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName)));
@@ -132,6 +135,7 @@ internal static class Program
 
             if (!main.LogoutRequested)
                 break;
+            ApiAuthSession.Clear();
         }
     }
 }

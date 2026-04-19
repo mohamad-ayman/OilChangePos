@@ -1,10 +1,14 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OilChangePOS.API.Security;
 using OilChangePOS.Business;
+using OilChangePOS.Domain;
 
 namespace OilChangePOS.API.Controllers;
 
 [ApiController]
 [Route("api/main-warehouse")]
+[Authorize(Roles = nameof(UserRole.Admin))]
 public sealed class MainWarehouseController(IMainWarehouseAdminService mainWarehouse) : ControllerBase
 {
     [HttpGet("grid-rows")]
@@ -29,9 +33,13 @@ public sealed class MainWarehouseController(IMainWarehouseAdminService mainWareh
         return NoContent();
     }
 
-    public sealed record ImportBody(int UserId, int MainWarehouseId, List<MainWarehouseExcelImportLineDto> Lines);
+    public sealed record ImportBody(int MainWarehouseId, List<MainWarehouseExcelImportLineDto> Lines);
 
     [HttpPost("import")]
-    public async Task<ActionResult<int>> Import([FromBody] ImportBody body, CancellationToken ct) =>
-        Ok(await mainWarehouse.ImportExcelLinesAsync(body.UserId, body.MainWarehouseId, body.Lines, ct));
+    public async Task<ActionResult<int>> Import([FromBody] ImportBody body, CancellationToken ct)
+    {
+        if (!this.TryGetRequiredUserId(out var uid))
+            return Unauthorized();
+        return Ok(await mainWarehouse.ImportExcelLinesAsync(uid, body.MainWarehouseId, body.Lines, ct));
+    }
 }

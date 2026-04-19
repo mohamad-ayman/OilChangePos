@@ -17,7 +17,10 @@ public enum WarehouseType
 public enum UserRole
 {
     Admin = 1,
-    Branch = 2
+    /// <summary>Branch manager — one home branch, operational scope (POS/inventory/reports for that branch).</summary>
+    Manager = 2,
+    /// <summary>Branch POS operator — same branch binding as manager; intended for least-privilege POS use.</summary>
+    Cashier = 3
 }
 
 public class Company
@@ -224,9 +227,9 @@ public class AppUser
     public int Id { get; set; }
     public string Username { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
-    public UserRole Role { get; set; } = UserRole.Branch;
+    public UserRole Role { get; set; } = UserRole.Cashier;
     public bool IsActive { get; set; } = true;
-    /// <summary>When <see cref="Role"/> is <see cref="UserRole.Branch"/>, POS/inventory default to this active branch warehouse; if null, first branch by name is used.</summary>
+    /// <summary>When <see cref="Role"/> is <see cref="UserRole.Manager"/> or <see cref="UserRole.Cashier"/>, POS/inventory default to this active branch warehouse; if null, first branch by name is used.</summary>
     public int? HomeBranchWarehouseId { get; set; }
     public Warehouse? HomeBranchWarehouse { get; set; }
 }
