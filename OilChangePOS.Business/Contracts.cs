@@ -235,7 +235,10 @@ public record SalesDashboardDto(
     decimal EstimatedCogs,
     decimal EstimatedGrossProfit,
     List<SlowMovingProductDto> SlowMovingProducts,
-    List<TransferLedgerRowDto> TransfersInPeriod);
+    List<TransferLedgerRowDto> TransfersInPeriod,
+    bool ContainsEstimatedCost,
+    decimal TotalOperatingExpenses,
+    decimal NetProfitAfterExpenses);
 
 public record SalesPeriodSummaryDto(
     DateTime FromLocalDate,
@@ -254,7 +257,8 @@ public record InvoiceProfitDto(
     decimal NetRevenue,
     decimal EstimatedCogs,
     decimal EstimatedGrossProfit,
-    decimal MarginPercent);
+    decimal MarginPercent,
+    bool ContainsEstimatedCost);
 
 public record ProductProfitDto(
     int ProductId,
@@ -262,12 +266,21 @@ public record ProductProfitDto(
     decimal QuantitySold,
     decimal Revenue,
     decimal EstimatedCogs,
-    decimal EstimatedGrossProfit);
+    decimal EstimatedGrossProfit,
+    bool ContainsEstimatedCost);
 
+/// <param name="TotalOperatingExpenses">
+/// Sum of <see cref="Expense"/> in the period. When <c>warehouseId</c> is set, only rows with
+/// <see cref="Expense.WarehouseId"/> equal to that site (branch-specific operating costs). When null (admin), all expenses in range.
+/// </param>
+/// <param name="NetProfitAfterExpenses"><see cref="TotalEstimatedGrossProfit"/> minus <see cref="TotalOperatingExpenses"/>.</param>
 public record ProfitRollupDto(
     decimal TotalRevenue,
     decimal TotalEstimatedCogs,
-    decimal TotalEstimatedGrossProfit);
+    decimal TotalEstimatedGrossProfit,
+    bool ContainsEstimatedCost,
+    decimal TotalOperatingExpenses,
+    decimal NetProfitAfterExpenses);
 
 public record WarehouseStockMovementRowDto(
     int ProductId,

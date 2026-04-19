@@ -54,6 +54,16 @@ export type BranchSellerSummaryRow = {
   invoicesNetTotal: number
 }
 
+/** Matches `GET /api/Reports/profit-rollup` for one warehouse (branch net profit). */
+export type BranchProfitRollup = {
+  totalRevenue: number
+  totalEstimatedCogs: number
+  totalEstimatedGrossProfit: number
+  containsEstimatedCost: boolean
+  totalOperatingExpenses: number
+  netProfitAfterExpenses: number
+}
+
 export async function getBranchSalesLineRegister(
   fromLocalDate: string,
   toLocalDate: string,
@@ -104,6 +114,17 @@ export async function getBranchSellerSummaries(
   warehouseId: number,
 ): Promise<BranchSellerSummaryRow[]> {
   const { data } = await http.get<BranchSellerSummaryRow[]>('/api/Reports/branch-sellers', {
+    params: { fromLocalDate, toLocalDate, warehouseId },
+  })
+  return data
+}
+
+export async function getBranchProfitRollup(
+  fromLocalDate: string,
+  toLocalDate: string,
+  warehouseId: number,
+): Promise<BranchProfitRollup> {
+  const { data } = await http.get<BranchProfitRollup>('/api/Reports/profit-rollup', {
     params: { fromLocalDate, toLocalDate, warehouseId },
   })
   return data

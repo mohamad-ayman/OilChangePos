@@ -9,6 +9,7 @@ export type NavIcon =
   | 'transfers'
   | 'purchases'
   | 'reports'
+  | 'expenses'
   | 'users'
   | 'placeholder'
 
@@ -76,6 +77,13 @@ export const navigationSections: NavSection[] = [
     labelKey: 'nav.section.insights',
     items: [
       { id: 'reports', labelKey: 'nav.reports', path: '/app/reports', icon: 'reports', allowedRoles: ['admin', 'manager'] },
+      {
+        id: 'expenses',
+        labelKey: 'nav.expenses',
+        path: '/app/expenses',
+        icon: 'expenses',
+        allowedRoles: ['admin', 'manager', 'cashier'],
+      },
     ],
   },
   {

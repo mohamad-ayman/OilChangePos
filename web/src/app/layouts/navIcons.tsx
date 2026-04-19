@@ -87,6 +87,17 @@ function ReceiptIcon({ active }: IconProps) {
   )
 }
 
+function WalletIcon({ active }: IconProps) {
+  return iconWrap(
+    active ? 'bg-sky-600/15 text-sky-800' : 'bg-slate-100 text-slate-600 group-hover:bg-slate-200 group-hover:text-slate-800',
+    <svg viewBox="0 0 24 24" fill="none" className="h-[1.125rem] w-[1.125rem]" stroke="currentColor" strokeWidth="1.75">
+      <path d="M4 7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7Z" strokeLinejoin="round" />
+      <path d="M4 10h16" strokeLinecap="round" />
+      <circle cx="16" cy="14" r="1" fill="currentColor" stroke="none" />
+    </svg>,
+  )
+}
+
 function ChartIcon({ active }: IconProps) {
   return iconWrap(
     active ? 'bg-sky-600/15 text-sky-800' : 'bg-slate-100 text-slate-600 group-hover:bg-slate-200 group-hover:text-slate-800',
@@ -136,6 +147,8 @@ export function NavItemIcon({ icon, active }: { icon: NavIcon; active: boolean }
       return <ReceiptIcon {...props} />
     case 'reports':
       return <ChartIcon {...props} />
+    case 'expenses':
+      return <WalletIcon {...props} />
     case 'users':
       return <UsersIcon {...props} />
     default:

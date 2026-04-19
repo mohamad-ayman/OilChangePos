@@ -114,6 +114,8 @@ public class Invoice
     public decimal Total { get; set; }
     public string PaymentMethod { get; set; } = "Cash";
     public int CreatedByUserId { get; set; }
+    /// <summary>True when any sale line used estimated COGS (no <see cref="StockMovement.SourcePurchaseId"/> slice).</summary>
+    public bool ContainsEstimatedCost { get; set; }
 
     public Customer? Customer { get; set; }
     public Warehouse? Warehouse { get; set; }
@@ -264,7 +266,7 @@ public class BranchStockRequest
     public int? FulfillmentStockMovementId { get; set; }
 }
 
-/// <summary>Manual operating expenses (rent, utilities, etc.) for cash-flow reporting — not COGS.</summary>
+/// <summary>Manual operating expenses (rent, utilities, etc.) — not COGS. Set <see cref="WarehouseId"/> to attribute cost to a branch for net-profit rollups.</summary>
 public class Expense
 {
     public int Id { get; set; }

@@ -472,11 +472,8 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
             {
                 if (still <= 0)
                     break;
-                var allocatedOut = await db.StockMovements.AsNoTracking()
-                    .Where(m => m.MovementType == StockMovementType.Transfer
-                                && m.FromWarehouseId == request.FromWarehouseId
-                                && m.SourcePurchaseId == p.Id)
-                    .SumAsync(m => m.Quantity, cancellationToken);
+                var allocatedOut = await PurchaseBatchLedger.SumAllocatedOutFromPurchaseAsync(
+                    db, request.FromWarehouseId, p.Id, cancellationToken);
                 var bookRemaining = p.Quantity - allocatedOut;
                 if (bookRemaining <= 0)
                     continue;
@@ -584,6 +581,8 @@ public class SalesService(IDbContextFactory<OilChangePosDbContext> dbFactory) : 
         var productIds = request.Items.Select(x => x.ProductId).Distinct().ToList();
         var products = await db.Products.Where(x => productIds.Contains(x.Id) && x.IsActive).ToDictionaryAsync(x => x.Id, cancellationToken);
         var priceOverrides = await BranchSalePricing.LoadOverridesAsync(db, request.WarehouseId, productIds, cancellationToken);
+        var mainWarehouse = await db.Warehouses.AsNoTracking().FirstOrDefaultAsync(x => x.Type == WarehouseType.Main, cancellationToken);
+        var mainWarehouseId = mainWarehouse?.Id ?? 0;
 
         var subtotal = 0m;
         foreach (var item in request.Items)
@@ -612,6 +611,7 @@ public class SalesService(IDbContextFactory<OilChangePosDbContext> dbFactory) : 
         db.Invoices.Add(invoice);
         await db.SaveChangesAsync(cancellationToken);
 
+        var anyEstimatedCogs = false;
         foreach (var item in request.Items)
         {
             var product = products[item.ProductId];
@@ -626,17 +626,19 @@ public class SalesService(IDbContextFactory<OilChangePosDbContext> dbFactory) : 
                 LineTotal = lineTotal
             });
 
-            db.StockMovements.Add(new StockMovement
-            {
-                ProductId = item.ProductId,
-                MovementType = StockMovementType.Sale,
-                Quantity = item.Quantity,
-                FromWarehouseId = request.WarehouseId,
-                ReferenceId = invoice.Id,
-                Notes = "بيع نقطة البيع"
-            });
+            anyEstimatedCogs |= await PurchaseBatchLedger.AllocateSaleLineAsync(
+                db,
+                item.ProductId,
+                request.WarehouseId,
+                saleWarehouse.Type,
+                mainWarehouseId,
+                item.Quantity,
+                invoice.Id,
+                "بيع نقطة البيع",
+                cancellationToken);
         }
 
+        invoice.ContainsEstimatedCost = anyEstimatedCogs;
         await db.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
         return invoice.Id;
@@ -656,6 +658,8 @@ public class ServiceOrderService(IDbContextFactory<OilChangePosDbContext> dbFact
         var productIds = request.Details.Select(x => x.ProductId).Distinct().ToList();
         var products = await db.Products.Where(x => productIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, cancellationToken);
         var priceOverrides = await BranchSalePricing.LoadOverridesAsync(db, warehouseId, productIds, cancellationToken);
+        var mainWarehouse = await db.Warehouses.AsNoTracking().FirstOrDefaultAsync(x => x.Type == WarehouseType.Main, cancellationToken);
+        var mainWarehouseId = mainWarehouse?.Id ?? 0;
         decimal subtotal = 0;
 
         foreach (var detail in request.Details)
@@ -693,15 +697,16 @@ public class ServiceOrderService(IDbContextFactory<OilChangePosDbContext> dbFact
                 LineTotal = detail.Quantity * unit
             });
 
-            db.StockMovements.Add(new StockMovement
-            {
-                ProductId = detail.ProductId,
-                MovementType = StockMovementType.Sale,
-                Quantity = detail.Quantity,
-                FromWarehouseId = warehouseId,
-                ReferenceId = service.Id,
-                Notes = "خدمة تغيير الزيت"
-            });
+            _ = await PurchaseBatchLedger.AllocateSaleLineAsync(
+                db,
+                detail.ProductId,
+                warehouseId,
+                saleWarehouse.Type,
+                mainWarehouseId,
+                detail.Quantity,
+                service.Id,
+                "خدمة تغيير الزيت",
+                cancellationToken);
         }
 
         await db.SaveChangesAsync(cancellationToken);
@@ -738,6 +743,143 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
             select new { p.Id, p.Name, p.PackageSize, CompanyName = c != null ? c.Name : (string?)null }
         ).ToListAsync(cancellationToken);
         return rows.ToDictionary(x => x.Id, x => ProductDisplayNames.CatalogDisplayName(x.CompanyName, x.Name, x.PackageSize));
+    }
+
+    /// <summary>POS invoice sale rows (batch + optional estimated slice); avoids mixing with service-order movements that share <see cref="StockMovement.ReferenceId"/> space.</summary>
+    private static bool IsPosInvoiceSaleBatchMovement(StockMovement m)
+    {
+        if (m.MovementType != StockMovementType.Sale || m.ReferenceId is not int || m.FromWarehouseId is null)
+            return false;
+        var n = m.Notes ?? string.Empty;
+        return n == "بيع نقطة البيع"
+               || n.StartsWith("بيع نقطة البيع —", StringComparison.Ordinal)
+               || n == "بيع — تكلفة مقدّرة (دفعة غير مسنَدة)";
+    }
+
+    private static int? InvoiceEffectiveWarehouseId(Invoice inv, int mainWarehouseId) =>
+        inv.WarehouseId ?? (mainWarehouseId != 0 ? mainWarehouseId : null);
+
+    private sealed class PosInvoiceCogsBatchComputation
+    {
+        public Dictionary<int, decimal> CogsByInvoiceId { get; } = new();
+        public Dictionary<int, bool> ContainsEstimatedByInvoiceId { get; } = new();
+        public Dictionary<int, decimal> CogsByProductId { get; } = new();
+        public Dictionary<int, bool> ContainsEstimatedByProductId { get; } = new();
+        public bool AnyContainsEstimated { get; set; }
+    }
+
+    private static async Task<PosInvoiceCogsBatchComputation> ComputePosInvoiceSaleCogsAsync(
+        OilChangePosDbContext db,
+        List<Invoice> invoices,
+        List<InvoiceItem> allLines,
+        Dictionary<int, decimal> avgCostByProduct,
+        int mainWarehouseId,
+        CancellationToken cancellationToken)
+    {
+        var result = new PosInvoiceCogsBatchComputation();
+        if (invoices.Count == 0)
+            return result;
+
+        var invoiceIds = invoices.Select(x => x.Id).ToList();
+        var movements = await db.StockMovements.AsNoTracking()
+            .Where(m =>
+                m.MovementType == StockMovementType.Sale &&
+                m.ReferenceId != null &&
+                invoiceIds.Contains(m.ReferenceId.Value))
+            .ToListAsync(cancellationToken);
+
+        var posMoves = movements.Where(IsPosInvoiceSaleBatchMovement).ToList();
+
+        var purchaseIds = posMoves
+            .Where(m => m.SourcePurchaseId != null)
+            .Select(m => m.SourcePurchaseId!.Value)
+            .Distinct()
+            .ToList();
+        var purchasePrices = purchaseIds.Count == 0
+            ? new Dictionary<int, decimal>()
+            : await db.Purchases.AsNoTracking()
+                .Where(p => purchaseIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => p.PurchasePrice, cancellationToken);
+
+        foreach (var inv in invoices)
+        {
+            var effWh = InvoiceEffectiveWarehouseId(inv, mainWarehouseId);
+            var invMoves = posMoves
+                .Where(m => m.ReferenceId == inv.Id && (effWh == null || m.FromWarehouseId == effWh))
+                .ToList();
+
+            decimal cogs = 0;
+            var anyEst = inv.ContainsEstimatedCost;
+
+            if (invMoves.Count > 0)
+            {
+                foreach (var m in invMoves)
+                {
+                    var lineEst = false;
+                    decimal unitCost;
+                    if (m.SourcePurchaseId is int pid)
+                    {
+                        if (purchasePrices.TryGetValue(pid, out var pp))
+                            unitCost = pp;
+                        else
+                        {
+                            unitCost = avgCostByProduct.GetValueOrDefault(m.ProductId, 0m);
+                            lineEst = true;
+                        }
+                    }
+                    else
+                    {
+                        unitCost = avgCostByProduct.GetValueOrDefault(m.ProductId, 0m);
+                        lineEst = true;
+                    }
+
+                    var lineCogs = m.Quantity * unitCost;
+                    cogs += lineCogs;
+                    if (lineEst)
+                        anyEst = true;
+
+                    result.CogsByProductId[m.ProductId] = result.CogsByProductId.GetValueOrDefault(m.ProductId, 0m) + lineCogs;
+                    if (lineEst)
+                        result.ContainsEstimatedByProductId[m.ProductId] = true;
+                }
+            }
+            else
+            {
+                anyEst = true;
+                foreach (var l in allLines.Where(x => x.InvoiceId == inv.Id))
+                {
+                    var lineCogs = l.Quantity * avgCostByProduct.GetValueOrDefault(l.ProductId, 0m);
+                    cogs += lineCogs;
+                    result.CogsByProductId[l.ProductId] = result.CogsByProductId.GetValueOrDefault(l.ProductId, 0m) + lineCogs;
+                    result.ContainsEstimatedByProductId[l.ProductId] = true;
+                }
+            }
+
+            result.CogsByInvoiceId[inv.Id] = cogs;
+            result.ContainsEstimatedByInvoiceId[inv.Id] = anyEst;
+            if (anyEst)
+                result.AnyContainsEstimated = true;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Sums manual operating expenses in the UTC half-open range. When <paramref name="warehouseId"/> is set,
+    /// only expenses tagged to that warehouse (accurate branch P&amp;L); when null, company-wide total.
+    /// </summary>
+    private static async Task<decimal> SumOperatingExpensesAsync(
+        OilChangePosDbContext db,
+        DateTime fromUtcInclusive,
+        DateTime toUtcExclusive,
+        int? warehouseId,
+        CancellationToken cancellationToken)
+    {
+        var q = db.Expenses.AsNoTracking()
+            .Where(x => x.ExpenseDateUtc >= fromUtcInclusive && x.ExpenseDateUtc < toUtcExclusive);
+        if (warehouseId.HasValue)
+            q = q.Where(x => x.WarehouseId == warehouseId.Value);
+        return await q.SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
     }
 
     public async Task<DailySalesDto> GetDailySalesReportAsync(DateTime dateUtc, CancellationToken cancellationToken = default)
@@ -818,24 +960,14 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
             ? []
             : await db.InvoiceItems.AsNoTracking().Where(x => invoiceIds.Contains(x.InvoiceId)).ToListAsync(cancellationToken);
 
-        Dictionary<int, decimal> avgPurchaseCostByProduct = [];
-        if (mainId != 0)
-        {
-            var costRows = await db.Purchases.AsNoTracking()
-                .Where(x => x.WarehouseId == mainId)
-                .GroupBy(x => x.ProductId)
-                .Select(g => new
-                {
-                    ProductId = g.Key,
-                    Units = g.Sum(x => x.Quantity),
-                    CostSum = g.Sum(x => x.Quantity * x.PurchasePrice)
-                })
-                .ToListAsync(cancellationToken);
-            avgPurchaseCostByProduct = costRows.ToDictionary(x => x.ProductId, x => x.Units > 0 ? x.CostSum / x.Units : 0m);
-        }
-
-        var estimatedCogs = lineItems.Sum(x => x.Quantity * avgPurchaseCostByProduct.GetValueOrDefault(x.ProductId, 0m));
+        var avgPurchaseCostByProduct = await LoadAvgPurchaseCostByProductAsync(db, mainId, cancellationToken);
+        var batchCogs = await ComputePosInvoiceSaleCogsAsync(db, invoices, lineItems, avgPurchaseCostByProduct, mainId, cancellationToken);
+        var estimatedCogs = invoices.Sum(inv => batchCogs.CogsByInvoiceId.GetValueOrDefault(inv.Id, 0m));
         var estimatedGrossProfit = net - estimatedCogs;
+        var operatingExpenses = await db.Expenses.AsNoTracking()
+            .Where(x => x.ExpenseDateUtc >= from && x.ExpenseDateUtc < to && x.WarehouseId == warehouseId)
+            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+        var netProfitAfterExpenses = estimatedGrossProfit - operatingExpenses;
 
         var soldQtyByProduct = lineItems
             .GroupBy(x => x.ProductId)
@@ -888,7 +1020,10 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
             estimatedCogs,
             estimatedGrossProfit,
             slowMoving,
-            transferDtos);
+            transferDtos,
+            batchCogs.AnyContainsEstimated,
+            operatingExpenses,
+            netProfitAfterExpenses);
     }
 
     public async Task<List<SalesByWarehouseSummaryDto>> GetSalesSummariesByWarehouseAsync(DateTime fromUtc, DateTime toUtc, CancellationToken cancellationToken = default)
@@ -987,13 +1122,13 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
         var lines = await db.InvoiceItems.AsNoTracking().Where(x => ids.Contains(x.InvoiceId)).ToListAsync(cancellationToken);
         var avgCost = await LoadAvgPurchaseCostByProductAsync(db, mainId, cancellationToken);
         var whName = invoices.ToDictionary(x => x.Id, x => x.Warehouse?.Name);
+        var batchCogs = await ComputePosInvoiceSaleCogsAsync(db, invoices, lines, avgCost, mainId, cancellationToken);
 
         var list = new List<InvoiceProfitDto>();
         foreach (var inv in invoices)
         {
             var net = inv.Total;
-            var invLines = lines.Where(l => l.InvoiceId == inv.Id).ToList();
-            var cogs = invLines.Sum(l => l.Quantity * avgCost.GetValueOrDefault(l.ProductId, 0m));
+            var cogs = batchCogs.CogsByInvoiceId.GetValueOrDefault(inv.Id, 0m);
             var profit = net - cogs;
             var margin = net > 0 ? Math.Round(100m * profit / net, 2) : 0m;
             list.Add(new InvoiceProfitDto(
@@ -1004,7 +1139,8 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
                 net,
                 cogs,
                 profit,
-                margin));
+                margin,
+                batchCogs.ContainsEstimatedByInvoiceId.GetValueOrDefault(inv.Id, false)));
         }
 
         return list;
@@ -1036,7 +1172,10 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
             .Select(g => new { ProductId = g.Key, Qty = g.Sum(x => x.Quantity), Revenue = g.Sum(x => x.LineTotal) })
             .ToListAsync(cancellationToken);
 
+        var invoices = await db.Invoices.AsNoTracking().Where(x => invoiceIds.Contains(x.Id)).ToListAsync(cancellationToken);
+        var lines = await db.InvoiceItems.AsNoTracking().Where(x => invoiceIds.Contains(x.InvoiceId)).ToListAsync(cancellationToken);
         var avgCost = await LoadAvgPurchaseCostByProductAsync(db, mainId, cancellationToken);
+        var batchCogs = await ComputePosInvoiceSaleCogsAsync(db, invoices, lines, avgCost, mainId, cancellationToken);
         var productIds = grouped.Select(x => x.ProductId).ToList();
         var names = await db.Products.AsNoTracking().Where(x => productIds.Contains(x.Id))
             .ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
@@ -1044,8 +1183,9 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
         return grouped
             .Select(x =>
             {
-                var cogs = x.Qty * avgCost.GetValueOrDefault(x.ProductId, 0m);
-                return new ProductProfitDto(x.ProductId, names.GetValueOrDefault(x.ProductId, $"#{x.ProductId}"), x.Qty, x.Revenue, cogs, x.Revenue - cogs);
+                var cogs = batchCogs.CogsByProductId.GetValueOrDefault(x.ProductId, 0m);
+                var est = batchCogs.ContainsEstimatedByProductId.GetValueOrDefault(x.ProductId, false);
+                return new ProductProfitDto(x.ProductId, names.GetValueOrDefault(x.ProductId, $"#{x.ProductId}"), x.Qty, x.Revenue, cogs, x.Revenue - cogs, est);
             })
             .OrderByDescending(x => x.EstimatedGrossProfit)
             .ToList();
@@ -1056,7 +1196,13 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
         var products = await GetProductProfitBreakdownAsync(fromLocalDate, toLocalDate, warehouseId, cancellationToken);
         var rev = products.Sum(x => x.Revenue);
         var cogs = products.Sum(x => x.EstimatedCogs);
-        return new ProfitRollupDto(rev, cogs, rev - cogs);
+        var gross = rev - cogs;
+        var anyEst = products.Exists(x => x.ContainsEstimatedCost);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var (fromUtc, toUtcEx) = LocalDateRangeToUtcExclusive(fromLocalDate, toLocalDate);
+        var operatingExpenses = await SumOperatingExpensesAsync(db, fromUtc, toUtcEx, warehouseId, cancellationToken);
+        return new ProfitRollupDto(rev, cogs, gross, anyEst, operatingExpenses, gross - operatingExpenses);
     }
 
     public async Task<List<WarehouseStockMovementRowDto>> GetCurrentStockFromMovementsAsync(int? warehouseId, CancellationToken cancellationToken = default)

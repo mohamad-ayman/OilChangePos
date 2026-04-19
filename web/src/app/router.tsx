@@ -6,6 +6,7 @@ import { InventoryPage } from '@/features/inventory'
 import { MainWarehousePage } from '@/features/main-warehouse'
 import { POSPage } from '@/features/pos'
 import { ReportsDashboardPage } from '@/features/reports'
+import { ExpensesPage } from '@/features/expenses'
 import {
   CreateTransferWizard,
   DirectTransferPage,
@@ -39,6 +40,7 @@ const router = createBrowserRouter([
               { path: 'stock-balances', element: <InventoryPage /> },
               { path: 'stock-requests', element: <StockRequestsPage /> },
               { path: 'reports', element: <ReportsDashboardPage /> },
+              { path: 'expenses', element: <ExpensesPage /> },
               {
                 element: <RequireRole allowedRoles={['admin']} />,
                 children: [

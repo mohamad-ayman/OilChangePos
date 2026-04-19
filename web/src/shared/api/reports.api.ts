@@ -23,7 +23,12 @@ export type SalesMonthlyPoint = { month: string; sales: number; profit: number; 
 
 export type SalesSummary = {
   totalSales: number
+  /** Revenue − COGS − operating expenses in the rollup window (admin live); branch mock/live may omit profit. */
   totalProfit: number
+  /** When present, revenue − COGS before operating expenses (admin). */
+  grossProfitBeforeExpenses?: number
+  /** When present, operating expenses deducted from gross to compute totalProfit (admin). */
+  operatingExpensesTotal?: number
   transactionCount: number
   avgOrderValue: number
   daily: SalesDailyPoint[]
@@ -243,6 +248,10 @@ type ProfitRollupDto = {
   totalRevenue: number
   totalEstimatedCogs: number
   totalEstimatedGrossProfit: number
+  /** True when any COGS slice used blended average / unknown batch (see backend `ContainsEstimatedCost`). */
+  containsEstimatedCost?: boolean
+  totalOperatingExpenses: number
+  netProfitAfterExpenses: number
 }
 
 type StockFromMovementsRow = {
@@ -426,7 +435,9 @@ async function fetchSalesSummaryLive(access: ReportsAccess): Promise<SalesSummar
   const period = periodRes.data
   const profit = profitRes.data
   const totalSales = Number(period.netSales ?? 0)
-  const totalProfit = Number(profit.totalEstimatedGrossProfit ?? 0)
+  const grossProfit = Number(profit.totalEstimatedGrossProfit ?? 0)
+  const operatingExpensesTotal = Number(profit.totalOperatingExpenses ?? 0)
+  const totalProfit = profit.netProfitAfterExpenses != null ? Number(profit.netProfitAfterExpenses) : grossProfit
   const transactionCount = Number(period.invoiceCount ?? 0)
   const avgOrderValue =
     transactionCount > 0 ? Math.round((totalSales / transactionCount) * 100) / 100 : Number(period.averageInvoiceValue ?? 0)
@@ -434,6 +445,8 @@ async function fetchSalesSummaryLive(access: ReportsAccess): Promise<SalesSummar
   return {
     totalSales,
     totalProfit,
+    grossProfitBeforeExpenses: grossProfit,
+    operatingExpensesTotal,
     transactionCount,
     avgOrderValue,
     daily: dailyRows,
