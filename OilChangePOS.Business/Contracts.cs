@@ -146,7 +146,16 @@ public interface IReportService
     Task<List<SlowMovingProductDto>> GetSlowMovingProductsAsync(DateTime fromLocalDate, DateTime toLocalDate, int warehouseId, int take, CancellationToken cancellationToken = default);
 
     Task<List<DailyCashFlowRowDto>> GetDailyCashFlowAsync(DateTime fromLocalDate, DateTime toLocalDate, CancellationToken cancellationToken = default);
-    Task<List<ExpenseReportRowDto>> GetExpensesInPeriodAsync(DateTime fromLocalDate, DateTime toLocalDate, int? warehouseId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// When <paramref name="warehouseId"/> is set, returns only expenses with that <c>WarehouseId</c> (same scope as operating expenses in <see cref="GetProfitRollupAsync"/>). When null (admin), returns all rows in range.
+    /// When <paramref name="branchOperatorView"/> is <c>true</c> (non-admin), excludes head-office-allocated branch rows (<see cref="Expense.VisibleInBranchExpenseList"/> <c>false</c>).
+    /// </summary>
+    Task<List<ExpenseReportRowDto>> GetExpensesInPeriodAsync(
+        DateTime fromLocalDate,
+        DateTime toLocalDate,
+        int? warehouseId,
+        bool branchOperatorView,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Branch POS: one row per invoice line for the selected warehouse and local-date range (حصر المبيعات).</summary>
     Task<List<BranchSalesLineRegisterDto>> GetBranchSalesLineRegisterAsync(DateTime fromLocalDate, DateTime toLocalDate, int warehouseId, CancellationToken cancellationToken = default);

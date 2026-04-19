@@ -668,7 +668,8 @@ public static class DatabaseInitializer
                     [Description] NVARCHAR(500) NOT NULL,
                     [ExpenseDateUtc] DATETIME2 NOT NULL,
                     [WarehouseId] INT NULL,
-                    [CreatedByUserId] INT NOT NULL
+                    [CreatedByUserId] INT NOT NULL,
+                    [VisibleInBranchExpenseList] BIT NOT NULL CONSTRAINT [DF_Expenses_VisibleInBranchExpenseList] DEFAULT (1)
                 );
                 CREATE NONCLUSTERED INDEX [IX_Expenses_ExpenseDateUtc] ON [dbo].[Expenses]([ExpenseDateUtc]);
                 CREATE NONCLUSTERED INDEX [IX_Expenses_WarehouseId] ON [dbo].[Expenses]([WarehouseId]);
@@ -679,6 +680,14 @@ public static class DatabaseInitializer
                     ALTER TABLE [dbo].[Expenses] ADD CONSTRAINT [FK_Expenses_Users_CreatedByUserId]
                         FOREIGN KEY ([CreatedByUserId]) REFERENCES [dbo].[Users]([Id]);
             END
+            """);
+
+        await dbContext.Database.ExecuteSqlRawAsync(
+            """
+            IF OBJECT_ID(N'[dbo].[Expenses]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'dbo.Expenses', N'VisibleInBranchExpenseList') IS NULL
+                ALTER TABLE [dbo].[Expenses] ADD [VisibleInBranchExpenseList] BIT NOT NULL
+                    CONSTRAINT [DF_Expenses_VisibleInBranchExpenseList] DEFAULT (1);
             """);
     }
 

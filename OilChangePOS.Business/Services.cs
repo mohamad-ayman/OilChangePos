@@ -964,9 +964,7 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
         var batchCogs = await ComputePosInvoiceSaleCogsAsync(db, invoices, lineItems, avgPurchaseCostByProduct, mainId, cancellationToken);
         var estimatedCogs = invoices.Sum(inv => batchCogs.CogsByInvoiceId.GetValueOrDefault(inv.Id, 0m));
         var estimatedGrossProfit = net - estimatedCogs;
-        var operatingExpenses = await db.Expenses.AsNoTracking()
-            .Where(x => x.ExpenseDateUtc >= from && x.ExpenseDateUtc < to && x.WarehouseId == warehouseId)
-            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+        var operatingExpenses = await SumOperatingExpensesAsync(db, from, to, warehouseId, cancellationToken);
         var netProfitAfterExpenses = estimatedGrossProfit - operatingExpenses;
 
         var soldQtyByProduct = lineItems
@@ -1452,7 +1450,12 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
         }).ToList();
     }
 
-    public async Task<List<ExpenseReportRowDto>> GetExpensesInPeriodAsync(DateTime fromLocalDate, DateTime toLocalDate, int? warehouseId, CancellationToken cancellationToken = default)
+    public async Task<List<ExpenseReportRowDto>> GetExpensesInPeriodAsync(
+        DateTime fromLocalDate,
+        DateTime toLocalDate,
+        int? warehouseId,
+        bool branchOperatorView,
+        CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var (fromUtc, toUtcEx) = LocalDateRangeToUtcExclusive(fromLocalDate, toLocalDate);
@@ -1460,8 +1463,11 @@ public class ReportService(IDbContextFactory<OilChangePosDbContext> dbFactory, I
             .Include(x => x.Warehouse)
             .Include(x => x.CreatedByUser)
             .Where(x => x.ExpenseDateUtc >= fromUtc && x.ExpenseDateUtc < toUtcEx);
+        // Match <see cref="SumOperatingExpensesAsync"/>: scoped site = strictly tagged rows only (same total as profit rollup).
         if (warehouseId.HasValue)
-            q = q.Where(x => x.WarehouseId == null || x.WarehouseId == warehouseId.Value);
+            q = q.Where(x => x.WarehouseId == warehouseId.Value);
+        if (branchOperatorView)
+            q = q.Where(x => x.VisibleInBranchExpenseList);
 
         var rows = await q.OrderByDescending(x => x.ExpenseDateUtc).Take(2000).ToListAsync(cancellationToken);
         return rows.Select(x => new ExpenseReportRowDto(
@@ -1692,6 +1698,18 @@ public class ExpenseService(IDbContextFactory<OilChangePosDbContext> dbFactory) 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var actor = await RbacRules.RequireUserAsync(db, userId, cancellationToken);
         RbacRules.EnsureExpenseForActor(actor, warehouseId);
+
+        var visibleInBranchList = true;
+        if (actor.Role.IsAdmin() && warehouseId is int wid)
+        {
+            var siteType = await db.Warehouses.AsNoTracking()
+                .Where(w => w.Id == wid)
+                .Select(w => (WarehouseType?)w.Type)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (siteType == WarehouseType.Branch)
+                visibleInBranchList = false;
+        }
+
         var e = new Expense
         {
             Amount = amount,
@@ -1699,7 +1717,8 @@ public class ExpenseService(IDbContextFactory<OilChangePosDbContext> dbFactory) 
             Description = string.IsNullOrEmpty(description) ? category : description,
             ExpenseDateUtc = utc,
             WarehouseId = warehouseId,
-            CreatedByUserId = userId
+            CreatedByUserId = userId,
+            VisibleInBranchExpenseList = visibleInBranchList
         };
         db.Expenses.Add(e);
         await db.SaveChangesAsync(cancellationToken);

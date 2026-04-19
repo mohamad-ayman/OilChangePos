@@ -84,7 +84,8 @@ export function ExpensesPage() {
   const whById = useMemo(() => new Map(warehouses.map((w: Warehouse) => [w.id, w])), [warehouses])
 
   const rangeOk = applied.from <= applied.to
-  const canRecord = isAdmin || (user?.role === 'manager' || user?.role === 'cashier') ? homeId != null : false
+  const canRecord =
+    isAdmin || ((user?.role === 'manager' || user?.role === 'cashier') && homeId != null)
 
   const listParams = useMemo(() => {
     if (!rangeOk) return null

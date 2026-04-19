@@ -276,6 +276,11 @@ public class Expense
     public DateTime ExpenseDateUtc { get; set; } = DateTime.UtcNow;
     public int? WarehouseId { get; set; }
     public int CreatedByUserId { get; set; }
+    /// <summary>
+    /// When <c>false</c>, row is still summed for branch net profit but omitted from branch-operator expense lists
+    /// (set when an <see cref="UserRole.Admin"/> posts an expense attributed to a <see cref="WarehouseType.Branch"/> site).
+    /// </summary>
+    public bool VisibleInBranchExpenseList { get; set; } = true;
 
     public Warehouse? Warehouse { get; set; }
     public AppUser? CreatedByUser { get; set; }

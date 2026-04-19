@@ -608,7 +608,7 @@ export const messagesAr: Record<string, string> = {
   'rep.branch.col.onHand': 'المتاح',
   'rep.branch.col.threshold': 'الحد الأدنى',
   'rep.branch.plTitle': 'ملخص الربحية للفترة',
-  'rep.branch.plSubtitle': 'الإيراد والتكلفة والمصروفات التشغيلية المسندة لهذا الفرع فقط (مصروف بلا موقع لا يُحتسب هنا).',
+  'rep.branch.plSubtitle': 'الإيراد والتكلفة والمصروفات التشغيلية المسندة لهذا الموقع فقط (فواتير نقطة البيع + مصروفات موثّقة على نفس الموقع).',
   'rep.branch.plRevenue': 'إيراد المبيعات',
   'rep.branch.plCogs': 'تكلفة البضاعة',
   'rep.branch.plGross': 'إجمالي الربح',

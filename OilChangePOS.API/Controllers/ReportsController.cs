@@ -202,7 +202,8 @@ public sealed class ReportsController(IReportService reports) : ControllerBase
     {
         var deny = this.EnsureAdminOrOptionalHomeWarehouseFilter(warehouseId);
         if (deny is not null) return deny;
-        return Ok(await reports.GetExpensesInPeriodAsync(fromLocalDate, toLocalDate, warehouseId, ct));
+        var branchOperatorView = !User.IsAdmin();
+        return Ok(await reports.GetExpensesInPeriodAsync(fromLocalDate, toLocalDate, warehouseId, branchOperatorView, ct));
     }
 
     [HttpGet("branch-sales-lines")]
