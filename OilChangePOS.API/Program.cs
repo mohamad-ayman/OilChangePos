@@ -80,6 +80,8 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.AddResponseCompression(o => o.EnableForHttps = true);
+
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
                        ?? "Server=(localdb)\\MSSQLLocalDB;Database=OilChangePOSDb;Trusted_Connection=True;TrustServerCertificate=True;";
 
@@ -128,6 +130,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
+app.UseResponseCompression();
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();

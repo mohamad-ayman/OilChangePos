@@ -70,13 +70,8 @@ export async function deleteMainWarehousePurchase(purchaseId: number): Promise<v
   await http.delete(`/api/main-warehouse/purchase/${purchaseId}`)
 }
 
-export async function importMainWarehouseLines(
-  userId: number,
-  mainWarehouseId: number,
-  lines: MainWarehouseExcelImportLine[],
-): Promise<number> {
+export async function importMainWarehouseLines(mainWarehouseId: number, lines: MainWarehouseExcelImportLine[]): Promise<number> {
   const { data } = await http.post<number>('/api/main-warehouse/import', {
-    userId,
     mainWarehouseId,
     lines,
   })

@@ -147,6 +147,9 @@ export const messagesAr: Record<string, string> = {
   'mw.btnClear': 'مسح الحقول',
   'mw.exportCsv': 'تصدير إلى CSV',
   'mw.importCsv': 'استيراد من CSV',
+  'mw.importTemplate': 'نموذج CSV للاستيراد',
+  'mw.importHint':
+    'الاستيراد الجماعي: ملف CSV بثمانية أعمدة مفصولة بفاصلة أو فاصلة منقوطة: الشركة، اسم الصنف، التصنيف، العبوة، الكمية، سعر الشراء، تاريخ الإنتاج، تاريخ الشراء (يُفضّل yyyy-mm-dd أو mm/dd/yyyy). يُنشئ الشركة والصنف تلقائياً إن لم يكونا موجودين ثم يسجّل شراءً لكل سطر في المستودع الرئيسي دفعة واحدة.',
   'mw.col.company': 'الشركة',
   'mw.col.batch': 'دفعة',
   'mw.col.product': 'اسم المنتج',

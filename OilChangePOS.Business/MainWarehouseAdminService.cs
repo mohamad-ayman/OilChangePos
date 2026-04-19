@@ -204,54 +204,138 @@ public sealed class MainWarehouseAdminService(
 
     public async Task<int> ImportExcelLinesAsync(int userId, int mainWarehouseId, IReadOnlyList<MainWarehouseExcelImportLineDto> lines, CancellationToken cancellationToken = default)
     {
-        var imported = 0;
+        var prepped = new List<MainWarehouseExcelImportLineDto>();
         foreach (var line in lines)
         {
             if (line.Quantity <= 0) continue;
+            if (line.PurchasePrice < 0)
+                throw new InvalidOperationException("سعر الشراء لا يمكن أن يكون سالباً في ملف الاستيراد.");
             var name = line.ProductName.Trim();
             if (string.IsNullOrWhiteSpace(name)) continue;
-            var category = string.IsNullOrWhiteSpace(line.Category) ? "Oil" : line.Category.Trim();
-            var pack = string.IsNullOrWhiteSpace(line.PackageSize) ? "Unit" : line.PackageSize.Trim();
-            var coName = string.IsNullOrWhiteSpace(line.CompanyName) ? "عام" : line.CompanyName.Trim();
-
-            await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-            var companyRow = await db.Companies.FirstOrDefaultAsync(c => c.Name == coName, cancellationToken);
-            if (companyRow is null)
-            {
-                companyRow = new Company { Name = coName, IsActive = true };
-                db.Companies.Add(companyRow);
-                await db.SaveChangesAsync(cancellationToken);
-            }
-
-            var product = await db.Products.FirstOrDefaultAsync(x =>
-                x.CompanyId == companyRow.Id && x.Name == name && x.ProductCategory == category && x.PackageSize == pack, cancellationToken);
-            if (product is null)
-            {
-                product = new Product
-                {
-                    CompanyId = companyRow.Id,
-                    Name = name,
-                    ProductCategory = category,
-                    PackageSize = pack,
-                    UnitPrice = 0,
-                    IsActive = true
-                };
-                db.Products.Add(product);
-                await db.SaveChangesAsync(cancellationToken);
-            }
-
-            await inventoryService.AddStockAsync(new PurchaseStockRequest(
-                product.Id,
-                line.Quantity,
-                line.PurchasePrice,
-                line.ProductionDate,
-                line.PurchaseDate,
-                mainWarehouseId,
-                "استيراد من Excel",
-                userId), cancellationToken);
-            imported++;
+            prepped.Add(line);
         }
 
-        return imported;
+        if (prepped.Count == 0)
+            return 0;
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
+            ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        if (actor.Role != UserRole.Admin)
+            throw new InvalidOperationException("المسؤولون فقط يمكنهم إضافة مخزون في المستودع الرئيسي.");
+
+        var warehouse = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == mainWarehouseId, cancellationToken)
+            ?? throw new InvalidOperationException("المستودع غير موجود.");
+        if (warehouse.Type != WarehouseType.Main)
+            throw new InvalidOperationException("الشراء مسموح فقط في المستودع الرئيسي.");
+
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            static string CoKey(string s) => s.Trim();
+            static string Pk(int companyId, string name, string category, string pack) =>
+                $"{companyId}\u001f{name}\u001f{category}\u001f{pack}";
+
+            var companiesByName = new Dictionary<string, Company>(StringComparer.Ordinal);
+            foreach (var line in prepped)
+            {
+                var coName = string.IsNullOrWhiteSpace(line.CompanyName) ? "عام" : line.CompanyName.Trim();
+                var key = CoKey(coName);
+                if (companiesByName.ContainsKey(key))
+                    continue;
+                var row = await db.Companies.FirstOrDefaultAsync(c => c.Name == coName, cancellationToken);
+                if (row is null)
+                {
+                    row = new Company { Name = coName, IsActive = true };
+                    db.Companies.Add(row);
+                }
+
+                companiesByName[key] = row;
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+
+            var productsByKey = new Dictionary<string, Product>();
+            foreach (var line in prepped)
+            {
+                var name = line.ProductName.Trim();
+                var category = string.IsNullOrWhiteSpace(line.Category) ? "Oil" : line.Category.Trim();
+                var pack = string.IsNullOrWhiteSpace(line.PackageSize) ? "Unit" : line.PackageSize.Trim();
+                var coName = string.IsNullOrWhiteSpace(line.CompanyName) ? "عام" : line.CompanyName.Trim();
+                var companyRow = companiesByName[CoKey(coName)];
+                var pk = Pk(companyRow.Id, name, category, pack);
+                if (productsByKey.ContainsKey(pk))
+                    continue;
+
+                var product = await db.Products.FirstOrDefaultAsync(x =>
+                    x.CompanyId == companyRow.Id && x.Name == name && x.ProductCategory == category && x.PackageSize == pack, cancellationToken);
+                if (product is null)
+                {
+                    product = new Product
+                    {
+                        CompanyId = companyRow.Id,
+                        Name = name,
+                        ProductCategory = category,
+                        PackageSize = pack,
+                        UnitPrice = 0,
+                        IsActive = true
+                    };
+                    db.Products.Add(product);
+                }
+
+                productsByKey[pk] = product!;
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+
+            var purchases = new List<Purchase>();
+            foreach (var line in prepped)
+            {
+                var name = line.ProductName.Trim();
+                var category = string.IsNullOrWhiteSpace(line.Category) ? "Oil" : line.Category.Trim();
+                var pack = string.IsNullOrWhiteSpace(line.PackageSize) ? "Unit" : line.PackageSize.Trim();
+                var coName = string.IsNullOrWhiteSpace(line.CompanyName) ? "عام" : line.CompanyName.Trim();
+                var companyRow = companiesByName[CoKey(coName)];
+                var product = productsByKey[Pk(companyRow.Id, name, category, pack)];
+
+                var purchase = new Purchase
+                {
+                    ProductId = product.Id,
+                    Quantity = line.Quantity,
+                    PurchasePrice = line.PurchasePrice,
+                    ProductionDate = line.ProductionDate.Date,
+                    PurchaseDate = line.PurchaseDate.Date,
+                    WarehouseId = mainWarehouseId,
+                    CreatedByUserId = userId,
+                    Notes = "استيراد من Excel"
+                };
+                db.Purchases.Add(purchase);
+                purchases.Add(purchase);
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+
+            foreach (var purchase in purchases)
+            {
+                db.StockMovements.Add(new StockMovement
+                {
+                    ProductId = purchase.ProductId,
+                    MovementType = StockMovementType.Purchase,
+                    Quantity = purchase.Quantity,
+                    ToWarehouseId = mainWarehouseId,
+                    ReferenceId = purchase.Id,
+                    Notes = $"شراء: {purchase.Notes}"
+                });
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+            return purchases.Count;
+        }
+        catch
+        {
+            await tx.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 }

@@ -86,43 +86,56 @@ export function BranchOperationalReports({ warehouseId, topBar, className }: Bra
       {
         queryKey: branchReportKeys.salesLines(warehouseId, applied.from, applied.to),
         queryFn: () => getBranchSalesLineRegister(applied.from, applied.to, warehouseId),
-        enabled: rangeOk && warehouseId > 0,
-        staleTime: 30_000,
+        enabled: rangeOk && warehouseId > 0 && tab === 'sales_lines',
+        staleTime: 60_000,
       },
       {
         queryKey: branchReportKeys.incoming(warehouseId, applied.from, applied.to),
         queryFn: () => getBranchIncomingRegister(applied.from, applied.to, warehouseId),
-        enabled: rangeOk && warehouseId > 0,
-        staleTime: 30_000,
+        enabled: rangeOk && warehouseId > 0 && tab === 'incoming',
+        staleTime: 60_000,
       },
       {
         queryKey: branchReportKeys.transfers(warehouseId, applied.from, applied.to),
         queryFn: () => getBranchTransferLedger(applied.from, applied.to, warehouseId),
-        enabled: rangeOk && warehouseId > 0,
-        staleTime: 30_000,
+        enabled: rangeOk && warehouseId > 0 && tab === 'transfers',
+        staleTime: 60_000,
       },
       {
         queryKey: branchReportKeys.expenses(warehouseId, applied.from, applied.to),
         queryFn: () => getBranchExpenses(applied.from, applied.to, warehouseId),
-        enabled: rangeOk && warehouseId > 0,
-        staleTime: 30_000,
+        enabled: rangeOk && warehouseId > 0 && tab === 'expenses',
+        staleTime: 60_000,
       },
       {
         queryKey: branchReportKeys.sellers(warehouseId, applied.from, applied.to),
         queryFn: () => getBranchSellerSummaries(applied.from, applied.to, warehouseId),
-        enabled: rangeOk && warehouseId > 0,
-        staleTime: 30_000,
+        enabled: rangeOk && warehouseId > 0 && tab === 'sellers',
+        staleTime: 60_000,
       },
       {
         queryKey: branchReportKeys.lowStock(warehouseId),
         queryFn: () => getLowStockItems(warehouseId),
-        enabled: warehouseId > 0,
-        staleTime: 30_000,
+        enabled: warehouseId > 0 && tab === 'low_stock',
+        staleTime: 60_000,
       },
     ],
   })
 
-  const loadErr = [salesQ, incomingQ, transfersQ, expensesQ, sellersQ, lowQ].find((x) => x.isError)?.error
+  const activeQuery =
+    tab === 'sales_lines'
+      ? salesQ
+      : tab === 'incoming'
+        ? incomingQ
+        : tab === 'transfers'
+          ? transfersQ
+          : tab === 'expenses'
+            ? expensesQ
+            : tab === 'sellers'
+              ? sellersQ
+              : lowQ
+
+  const loadErr = activeQuery.isError ? activeQuery.error : undefined
 
   function applyRange() {
     setApplied({ from, to })
@@ -222,19 +235,6 @@ export function BranchOperationalReports({ warehouseId, topBar, className }: Bra
         break
     }
   }
-
-  const activeQuery =
-    tab === 'sales_lines'
-      ? salesQ
-      : tab === 'incoming'
-        ? incomingQ
-        : tab === 'transfers'
-          ? transfersQ
-          : tab === 'expenses'
-            ? expensesQ
-            : tab === 'sellers'
-              ? sellersQ
-              : lowQ
 
   return (
     <section
@@ -503,37 +503,33 @@ export function BranchOperationalReports({ warehouseId, topBar, className }: Bra
           </table>
         ) : null}
 
-        {tab === 'low_stock' ? (
-          lowQ.isPending ? (
-            <p className="px-2 py-6 text-center text-xs text-slate-500">{t('common.loading')}</p>
-          ) : (
-            <table className="w-full min-w-[28rem] border-collapse text-start text-xs">
-              <thead className="sticky top-0 z-10 bg-slate-100 text-[11px] font-semibold uppercase tracking-wide text-slate-600 shadow-sm">
+        {tab === 'low_stock' && !lowQ.isPending ? (
+          <table className="w-full min-w-[28rem] border-collapse text-start text-xs">
+            <thead className="sticky top-0 z-10 bg-slate-100 text-[11px] font-semibold uppercase tracking-wide text-slate-600 shadow-sm">
+              <tr>
+                <th className="border-b px-2 py-1.5">{t('rep.branch.col.product')}</th>
+                <th className="border-b px-2 py-1.5 text-end">{t('rep.branch.col.onHand')}</th>
+                <th className="border-b px-2 py-1.5 text-end">{t('rep.branch.col.threshold')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(lowQ.data ?? []).length === 0 ? (
                 <tr>
-                  <th className="border-b px-2 py-1.5">{t('rep.branch.col.product')}</th>
-                  <th className="border-b px-2 py-1.5 text-end">{t('rep.branch.col.onHand')}</th>
-                  <th className="border-b px-2 py-1.5 text-end">{t('rep.branch.col.threshold')}</th>
+                  <td colSpan={3} className="px-2 py-6 text-center text-slate-500">
+                    {t('rep.branch.lowStockEmpty')}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {(lowQ.data ?? []).length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="px-2 py-6 text-center text-slate-500">
-                      {t('rep.branch.lowStockEmpty')}
-                    </td>
+              ) : (
+                (lowQ.data ?? []).map((r) => (
+                  <tr key={r.productId} className="border-b border-slate-100 odd:bg-slate-50/80">
+                    <td className="px-2 py-1 font-medium">{r.productName}</td>
+                    <td className="px-2 py-1 text-end tabular-nums text-rose-800">{r.currentStock}</td>
+                    <td className="px-2 py-1 text-end tabular-nums text-slate-600">{r.threshold}</td>
                   </tr>
-                ) : (
-                  (lowQ.data ?? []).map((r) => (
-                    <tr key={r.productId} className="border-b border-slate-100 odd:bg-slate-50/80">
-                      <td className="px-2 py-1 font-medium">{r.productName}</td>
-                      <td className="px-2 py-1 text-end tabular-nums text-rose-800">{r.currentStock}</td>
-                      <td className="px-2 py-1 text-end tabular-nums text-slate-600">{r.threshold}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          )
+                ))
+              )}
+            </tbody>
+          </table>
         ) : null}
       </div>
     </section>

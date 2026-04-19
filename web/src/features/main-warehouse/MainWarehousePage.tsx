@@ -228,8 +228,7 @@ export function MainWarehousePage() {
   })
 
   const importMut = useMutation({
-    mutationFn: ({ lines }: { lines: MainWarehouseExcelImportLine[] }) =>
-      importMainWarehouseLines(user!.id, mainWh!.id, lines),
+    mutationFn: ({ lines }: { lines: MainWarehouseExcelImportLine[] }) => importMainWarehouseLines(mainWh!.id, lines),
     onSuccess: invalidate,
   })
 
@@ -345,6 +344,20 @@ export function MainWarehousePage() {
     deleteMut.mutate(pid)
   }
 
+  const downloadImportTemplate = () => {
+    const header =
+      'Company,Product,Category,PackageSize,Quantity,PurchasePrice,ProductionDate,PurchaseDate'
+    const example =
+      'Shell,Helix Ultra 5W-40,Oil,4L,24,185.50,2026-01-15,2026-04-01'
+    const csv = `\uFEFF${header}\n${example}\n`
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'main-warehouse-purchase-import-template.csv'
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
   const exportCsv = () => {
     const headers = [
       t('mw.col.companyProduct'),
@@ -449,8 +462,16 @@ export function MainWarehousePage() {
           >
             {t('mw.importCsv')}
           </button>
+          <button
+            type="button"
+            onClick={downloadImportTemplate}
+            className="rounded border border-slate-400 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50"
+          >
+            {t('mw.importTemplate')}
+          </button>
         </div>
       </div>
+      <p className="mt-2 max-w-3xl text-[11px] leading-relaxed text-slate-600">{t('mw.importHint')}</p>
 
       <section className="mt-4 space-y-3 rounded border border-slate-200 bg-white p-3">
         <h2 className="text-xs font-semibold text-slate-700">{t('mw.formSection')}</h2>
