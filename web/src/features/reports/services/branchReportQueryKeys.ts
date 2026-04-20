@@ -11,6 +11,4 @@ export const branchReportKeys = {
   sellers: (warehouseId: number, from: string, to: string) =>
     [...branchReportKeys.root, 'sellers', warehouseId, from, to] as const,
   lowStock: (warehouseId: number) => [...branchReportKeys.root, 'low-stock', warehouseId] as const,
-  profitRollup: (warehouseId: number, from: string, to: string) =>
-    [...branchReportKeys.root, 'profit-rollup', warehouseId, from, to] as const,
 }

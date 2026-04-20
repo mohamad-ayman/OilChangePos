@@ -1,11 +1,10 @@
 import type { ReactNode } from 'react'
 import { useMemo, useState } from 'react'
-import { useQueries, useQuery } from '@tanstack/react-query'
+import { useQueries } from '@tanstack/react-query'
 import { branchReportKeys } from '@/features/reports/services/branchReportQueryKeys'
 import {
   getBranchExpenses,
   getBranchIncomingRegister,
-  getBranchProfitRollup,
   getBranchSalesLineRegister,
   getBranchSellerSummaries,
   getBranchTransferLedger,
@@ -81,13 +80,6 @@ export function BranchOperationalReports({ warehouseId, topBar, className }: Bra
   const [tab, setTab] = useState<TabId>('sales_lines')
 
   const rangeOk = applied.from <= applied.to
-
-  const profitRollupQ = useQuery({
-    queryKey: branchReportKeys.profitRollup(warehouseId, applied.from, applied.to),
-    queryFn: () => getBranchProfitRollup(applied.from, applied.to, warehouseId),
-    enabled: rangeOk && warehouseId > 0,
-    staleTime: 60_000,
-  })
 
   const [salesQ, incomingQ, transfersQ, expensesQ, sellersQ, lowQ] = useQueries({
     queries: [
@@ -315,48 +307,6 @@ export function BranchOperationalReports({ warehouseId, topBar, className }: Bra
         <p className="px-4 pb-2 text-sm text-rose-700 sm:px-5">
           {t('common.error')}: {loadErr instanceof Error ? loadErr.message : String(loadErr)}
         </p>
-      ) : null}
-
-      {rangeOk && warehouseId > 0 ? (
-        <div className="border-b border-slate-200 bg-slate-50/90 px-4 py-3 sm:px-5">
-          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700">{t('rep.branch.plTitle')}</h3>
-          <p className="mt-1 text-[11px] leading-relaxed text-slate-600">{t('rep.branch.plSubtitle')}</p>
-          {profitRollupQ.isPending ? (
-            <p className="mt-2 text-xs text-slate-500">{t('common.loading')}</p>
-          ) : profitRollupQ.isError ? (
-            <p className="mt-2 text-xs text-rose-700">
-              {t('common.error')}: {profitRollupQ.error instanceof Error ? profitRollupQ.error.message : String(profitRollupQ.error)}
-            </p>
-          ) : profitRollupQ.data ? (
-            <>
-              <dl className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                <div className="rounded-lg border border-slate-200/80 bg-white px-3 py-2 shadow-sm">
-                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('rep.branch.plRevenue')}</dt>
-                  <dd className="mt-0.5 font-mono text-sm font-semibold text-slate-900">{money(profitRollupQ.data.totalRevenue)}</dd>
-                </div>
-                <div className="rounded-lg border border-slate-200/80 bg-white px-3 py-2 shadow-sm">
-                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('rep.branch.plCogs')}</dt>
-                  <dd className="mt-0.5 font-mono text-sm font-semibold text-slate-900">{money(profitRollupQ.data.totalEstimatedCogs)}</dd>
-                </div>
-                <div className="rounded-lg border border-slate-200/80 bg-white px-3 py-2 shadow-sm">
-                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('rep.branch.plGross')}</dt>
-                  <dd className="mt-0.5 font-mono text-sm font-semibold text-slate-900">{money(profitRollupQ.data.totalEstimatedGrossProfit)}</dd>
-                </div>
-                <div className="rounded-lg border border-slate-200/80 bg-white px-3 py-2 shadow-sm">
-                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('rep.branch.plExpenses')}</dt>
-                  <dd className="mt-0.5 font-mono text-sm font-semibold text-slate-900">{money(profitRollupQ.data.totalOperatingExpenses)}</dd>
-                </div>
-                <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 shadow-sm ring-1 ring-sky-100">
-                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-sky-900">{t('rep.branch.plNet')}</dt>
-                  <dd className="mt-0.5 font-mono text-sm font-bold text-sky-950">{money(profitRollupQ.data.netProfitAfterExpenses)}</dd>
-                </div>
-              </dl>
-              {profitRollupQ.data.containsEstimatedCost ? (
-                <p className="mt-2 text-[11px] text-amber-800">{t('rep.branch.plEstimatedCogs')}</p>
-              ) : null}
-            </>
-          ) : null}
-        </div>
       ) : null}
 
       <div className="-mx-px flex gap-1 overflow-x-auto border-b border-slate-200 px-3 py-2.5 sm:px-4">

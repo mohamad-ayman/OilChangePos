@@ -19,6 +19,17 @@ public record PurchaseReceiptLineInput(
 public record PurchaseReceiptBatchResult(int LinesPosted, IReadOnlyList<int> PurchaseIds);
 /// <param name="BranchSalePriceForDestination">When set, updates <see cref="BranchProductPrice"/> for the destination branch (only valid for Main → Branch transfers).</param>
 public record TransferStockRequest(int ProductId, decimal Quantity, int FromWarehouseId, int ToWarehouseId, string Notes, int UserId, decimal? BranchSalePriceForDestination = null);
+
+/// <summary>One SKU line for <see cref="TransferStockBulkRequest"/>.</summary>
+public record TransferStockBulkLineRequest(int ProductId, decimal Quantity, decimal? BranchSalePriceForDestination = null);
+
+/// <summary>Post many stock transfers in one database transaction (same route rules as <see cref="TransferStockRequest"/>).</summary>
+public record TransferStockBulkRequest(
+    int FromWarehouseId,
+    int ToWarehouseId,
+    string Notes,
+    int UserId,
+    List<TransferStockBulkLineRequest> Lines);
 public record AuditLineRequest(int ProductId, decimal ActualQuantity, int WarehouseId, string? ReasonCode = null);
 public record OilChangeRequest(int CustomerId, int CarId, int OdometerKm, int UserId, int WarehouseId, List<SaleItemRequest> Details);
 public record SetBranchPriceRequest(int ProductId, int WarehouseId, decimal SalePrice, int UserId);
@@ -56,6 +67,9 @@ public interface IInventoryService
 public interface ITransferService
 {
     Task<int> TransferStockAsync(TransferStockRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Same validation as <see cref="TransferStockAsync"/>; duplicate <c>ProductId</c> lines are merged by summing quantity.</summary>
+    Task<IReadOnlyList<int>> TransferStockBulkAsync(TransferStockBulkRequest request, CancellationToken cancellationToken = default);
 }
 
 public record CreateBranchStockRequestDto(int ProductId, decimal Quantity, string? Notes);

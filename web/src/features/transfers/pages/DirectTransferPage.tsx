@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { WarehouseType } from '@/entities/warehouse'
 import {
-  createTransferLine,
+  createTransferBulk,
   getEffectiveSalePrice,
   getInventorySnapshot,
   getProducts,
@@ -21,6 +21,8 @@ type TransferProductOption = {
   caption: string
 }
 
+type LineRow = { key: string; productId: number | ''; quantity: string; branchPrice: string }
+
 export function DirectTransferPage() {
   const user = useAuthStore((s) => s.user)
   const qc = useQueryClient()
@@ -30,10 +32,8 @@ export function DirectTransferPage() {
 
   const [fromId, setFromId] = useState<number | ''>('')
   const [toId, setToId] = useState<number | ''>('')
-  const [productId, setProductId] = useState<number | ''>('')
-  const [quantity, setQuantity] = useState('')
+  const [lines, setLines] = useState<LineRow[]>([{ key: 'line-0', productId: '', quantity: '', branchPrice: '' }])
   const [applyBranchPrice, setApplyBranchPrice] = useState(false)
-  const [branchPrice, setBranchPrice] = useState('')
   const [lastSuccessAt, setLastSuccessAt] = useState<string | null>(null)
   const [hFromDate, setHFromDate] = useState(() => {
     const d = new Date()
@@ -88,13 +88,43 @@ export function DirectTransferPage() {
   })
 
   const options = productOptionsQ.data ?? []
-  const selectedRow = options.find((o) => o.productId === productId)
 
-  const effPriceQ = useQuery({
-    queryKey: ['directXfer', 'effPrice', toId, productId],
-    queryFn: () => getEffectiveSalePrice(productId as number, toId as number),
-    enabled: mainToBranch && productId !== '' && typeof toId === 'number',
-  })
+  useEffect(() => {
+    if (!mainToBranch) {
+      setApplyBranchPrice(false)
+      setLines((rows) => rows.map((r) => ({ ...r, branchPrice: '' })))
+    }
+  }, [mainToBranch])
+
+  /** When destination branch changes while price updates are enabled, refresh effective prices for all rows that already have a product. */
+  useEffect(() => {
+    if (!applyBranchPrice || !mainToBranch || typeof toId !== 'number') return
+    let cancelled = false
+    void (async () => {
+      setLines((current) => {
+        void (async () => {
+          const filled = await Promise.all(
+            current.map(async (r) => {
+              if (r.productId === '') return { ...r, branchPrice: '' }
+              try {
+                const p = await getEffectiveSalePrice(r.productId as number, toId)
+                if (cancelled) return r
+                return { ...r, branchPrice: Number.isFinite(p) ? String(p) : '' }
+              } catch {
+                if (cancelled) return r
+                return { ...r, branchPrice: '' }
+              }
+            }),
+          )
+          if (!cancelled) setLines(filled)
+        })()
+        return current
+      })
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [toId, applyBranchPrice, mainToBranch])
 
   const historyQ = useQuery({
     queryKey: ['directXfer', 'history', hFromDate, hToDate, hFromWh, hToWh],
@@ -113,44 +143,65 @@ export function DirectTransferPage() {
     [historyRows],
   )
 
-  useEffect(() => {
-    if (!mainToBranch) {
-      setApplyBranchPrice(false)
-      setBranchPrice('')
+  function addLine() {
+    setLines((rows) => [
+      ...rows,
+      { key: `line-${Date.now()}-${rows.length}`, productId: '', quantity: '', branchPrice: '' },
+    ])
+  }
+
+  function removeLine(key: string) {
+    setLines((rows) => (rows.length <= 1 ? rows : rows.filter((r) => r.key !== key)))
+  }
+
+  function handleApplyBranchPriceToggle(on: boolean) {
+    setApplyBranchPrice(on)
+    if (!on) {
+      setLines((rows) => rows.map((r) => ({ ...r, branchPrice: '' })))
     }
-  }, [mainToBranch])
+  }
 
   const transferMut = useMutation({
     mutationFn: async () => {
-      if (!user || typeof fromId !== 'number' || typeof toId !== 'number' || productId === '') {
+      if (!user || typeof fromId !== 'number' || typeof toId !== 'number') {
         throw new Error('invalid')
       }
-      const qty = Number(quantity.replace(',', '.'))
-      if (!Number.isFinite(qty) || qty <= 0) throw new Error('qty')
-      const row = selectedRow
-      if (!row || qty > row.availableQty) throw new Error('max')
-
       if (fromWh?.type === WarehouseType.Branch && toWh?.type === WarehouseType.Branch) {
         throw new Error('b2b')
       }
       if (fromId === toId) throw new Error('same')
 
-      let branchSale: number | null = null
-      if (applyBranchPrice) {
-        if (!mainToBranch) throw new Error('priceRule')
-        const bp = Number(branchPrice.replace(',', '.'))
-        if (!Number.isFinite(bp) || bp < 0) throw new Error('price')
-        branchSale = bp
-      }
+      const payload: { productId: number; quantity: number; branchSalePriceForDestination?: number }[] = []
+      for (const row of lines) {
+        const emptyLine = row.productId === '' && !row.quantity.trim() && !row.branchPrice.trim()
+        if (emptyLine) continue
+        if (row.productId === '' || !row.quantity.trim()) throw new Error('lineInvalid')
+        const qty = Number(row.quantity.replace(',', '.'))
+        if (!Number.isFinite(qty) || qty <= 0) throw new Error('lineInvalid')
+        const opt = options.find((o) => o.productId === row.productId)
+        if (!opt || qty > opt.availableQty) throw new Error('lineInvalid')
 
-      await createTransferLine({
-        productId: productId as number,
-        quantity: qty,
+        let branchSale: number | undefined
+        if (applyBranchPrice && mainToBranch && row.branchPrice.trim()) {
+          const bp = Number(row.branchPrice.replace(',', '.'))
+          if (!Number.isFinite(bp) || bp < 0) throw new Error('linePrice')
+          branchSale = bp
+        }
+
+        payload.push({
+          productId: row.productId as number,
+          quantity: qty,
+          ...(branchSale !== undefined ? { branchSalePriceForDestination: branchSale } : {}),
+        })
+      }
+      if (payload.length === 0) throw new Error('noLines')
+
+      await createTransferBulk({
         fromWarehouseId: fromId,
         toWarehouseId: toId,
         notes: t('xfer.direct.notes'),
         userId: user.id,
-        branchSalePriceForDestination: branchSale ?? undefined,
+        lines: payload,
       })
     },
     onSuccess: async () => {
@@ -158,7 +209,8 @@ export function DirectTransferPage() {
       await qc.invalidateQueries({ queryKey: ['mainWarehouse'] })
       await qc.invalidateQueries({ queryKey: ['warehouses'] })
       await qc.invalidateQueries({ queryKey: ['directXfer', 'history'] })
-      setQuantity('')
+      setApplyBranchPrice(false)
+      setLines([{ key: `line-${Date.now()}`, productId: '', quantity: '', branchPrice: '' }])
       setLastSuccessAt(new Date().toISOString())
     },
   })
@@ -171,10 +223,9 @@ export function DirectTransferPage() {
       if (m === 'invalid') return t('xfer.direct.errInvalid')
       if (m === 'b2b') return t('xfer.direct.errBranchToBranch')
       if (m === 'same') return t('xfer.direct.errSameWh')
-      if (m === 'qty') return t('xfer.direct.errQty')
-      if (m === 'max') return t('xfer.direct.errQtyMax')
-      if (m === 'priceRule') return t('xfer.direct.errBranchPriceRule')
-      if (m === 'price') return t('xfer.direct.errBranchPrice')
+      if (m === 'noLines') return t('xfer.direct.bulkErrEmpty')
+      if (m === 'lineInvalid') return t('xfer.direct.bulkErrRow')
+      if (m === 'linePrice') return t('xfer.direct.bulkErrPrice')
     }
     if (axios.isAxiosError(e)) {
       const d = e.response?.data as { error?: string } | undefined
@@ -187,6 +238,8 @@ export function DirectTransferPage() {
     setLastSuccessAt(null)
     transferMut.mutate()
   }
+
+  const tableMinW = mainToBranch ? 'min-w-[720px]' : 'min-w-[560px]'
 
   return (
     <div className="space-y-4 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm shadow-slate-900/[0.04] ring-1 ring-slate-900/[0.02] sm:p-5">
@@ -222,8 +275,8 @@ export function DirectTransferPage() {
                 onChange={(e) => {
                   const v = e.target.value ? Number(e.target.value) : ''
                   setFromId(v)
-                  setProductId('')
-                  setQuantity('')
+                  setApplyBranchPrice(false)
+                  setLines([{ key: `line-${Date.now()}`, productId: '', quantity: '', branchPrice: '' }])
                 }}
                 className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-2 text-sm text-slate-900"
               >
@@ -255,87 +308,143 @@ export function DirectTransferPage() {
                 ))}
               </select>
             </label>
-
-            <label className="block text-xs text-slate-600 sm:col-span-2">
-              {t('xfer.direct.product')}
-              <select
-                value={productId === '' ? '' : String(productId)}
-                onChange={(e) => {
-                  setProductId(e.target.value ? Number(e.target.value) : '')
-                  setQuantity('')
-                }}
-                disabled={!fromId || productOptionsQ.isPending}
-                className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-2 text-sm text-slate-900 disabled:opacity-50"
-              >
-                <option value="">{productOptionsQ.isPending ? t('common.loading') : t('xfer.select')}</option>
-                {options.map((o) => (
-                  <option key={o.productId} value={o.productId}>
-                    {o.caption}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="block text-xs text-slate-600">
-              {t('xfer.direct.qty')}
-              <input
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                inputMode="decimal"
-                className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-2 text-sm text-slate-900"
-              />
-            </label>
-
-            <div className="rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
-              <p>
-                {t('xfer.direct.availableNow')}{' '}
-                <span className="font-mono text-slate-800">{selectedRow ? selectedRow.availableQty.toFixed(3) : '—'}</span>
-              </p>
-              <p className="mt-1">
-                {t('xfer.direct.maxQty')}{' '}
-                <span className="font-mono text-slate-800">{selectedRow ? selectedRow.availableQty.toFixed(3) : '—'}</span>
-              </p>
-            </div>
-
-            <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700 sm:col-span-2">
-              <input
-                type="checkbox"
-                checked={applyBranchPrice}
-                disabled={!mainToBranch}
-                onChange={(e) => {
-                  const on = e.target.checked
-                  setApplyBranchPrice(on)
-                  if (on && effPriceQ.data != null && Number.isFinite(effPriceQ.data)) {
-                    setBranchPrice(String(effPriceQ.data))
-                  }
-                }}
-              />
-              {t('xfer.direct.applyBranchPrice')}
-            </label>
-
-            <label className="block text-xs text-slate-600 sm:col-span-2">
-              {t('xfer.direct.branchPrice')}
-              <input
-                value={branchPrice}
-                onChange={(e) => setBranchPrice(e.target.value)}
-                disabled={!mainToBranch || !applyBranchPrice}
-                inputMode="decimal"
-                className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-2 text-sm text-slate-900 disabled:opacity-50"
-              />
-            </label>
           </div>
 
-          {mainToBranch && productId !== '' && typeof toId === 'number' ? (
-            <p className="mt-3 text-xs text-slate-500">
-              {effPriceQ.isPending
-                ? t('common.loading')
-                : t('xfer.direct.hint').replace('{p}', (effPriceQ.data ?? 0).toFixed(2))}
-            </p>
+          {mainToBranch ? (
+            <div className="mt-4 space-y-2 rounded border border-slate-200 bg-slate-50/80 p-3">
+              <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-800">
+                <input
+                  type="checkbox"
+                  checked={applyBranchPrice}
+                  disabled={typeof toId !== 'number'}
+                  onChange={(e) => handleApplyBranchPriceToggle(e.target.checked)}
+                />
+                {t('xfer.direct.applyBranchPrice')}
+              </label>
+              <p className="text-[11px] leading-relaxed text-slate-600">{t('xfer.direct.bulkBranchPriceHint')}</p>
+            </div>
           ) : null}
+
+          <h3 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-700">
+            {t('xfer.direct.linesTitle')}
+          </h3>
+
+          <div className="overflow-x-auto rounded border border-slate-200">
+            <table className={['w-full border-collapse text-start text-xs', tableMinW].join(' ')}>
+              <thead className="border-b border-slate-200 bg-slate-50 text-[10px] text-slate-500">
+                <tr>
+                  <th className="px-2 py-2">{t('xfer.direct.bulkProduct')}</th>
+                  <th className="px-2 py-2 w-24 text-end">{t('xfer.direct.colAvailable')}</th>
+                  <th className="px-2 py-2 w-28">{t('xfer.direct.bulkQty')}</th>
+                  {mainToBranch ? (
+                    <th className="px-2 py-2 w-32">{t('xfer.direct.bulkBranchPrice')}</th>
+                  ) : null}
+                  <th className="w-16 px-2 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((row) => {
+                  const opt = row.productId === '' ? undefined : options.find((o) => o.productId === row.productId)
+                  return (
+                    <tr key={row.key} className="border-b border-slate-100">
+                      <td className="px-2 py-1.5">
+                        <select
+                          value={row.productId === '' ? '' : String(row.productId)}
+                          onChange={(e) => {
+                            const v = e.target.value ? Number(e.target.value) : ''
+                            setLines((rows) =>
+                              rows.map((r) =>
+                                r.key === row.key ? { ...r, productId: v, quantity: '', branchPrice: '' } : r,
+                              ),
+                            )
+                            if (applyBranchPrice && mainToBranch && typeof toId === 'number' && v !== '') {
+                              void (async () => {
+                                try {
+                                  const p = await getEffectiveSalePrice(v, toId)
+                                  if (!Number.isFinite(p)) return
+                                  setLines((rows) =>
+                                    rows.map((r) =>
+                                      r.key === row.key ? { ...r, branchPrice: String(p) } : r,
+                                    ),
+                                  )
+                                } catch {
+                                  /* keep empty */
+                                }
+                              })()
+                            }
+                          }}
+                          disabled={!fromId || productOptionsQ.isPending}
+                          className="w-full max-w-md rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 disabled:opacity-50"
+                        >
+                          <option value="">{productOptionsQ.isPending ? t('common.loading') : t('xfer.select')}</option>
+                          {options.map((o) => (
+                            <option key={o.productId} value={o.productId}>
+                              {o.caption}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-2 py-1.5 text-end font-mono text-[11px] text-slate-600">
+                        {opt ? opt.availableQty.toFixed(3) : '—'}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input
+                          value={row.quantity}
+                          onChange={(e) => {
+                            const v = e.target.value
+                            setLines((rows) => rows.map((r) => (r.key === row.key ? { ...r, quantity: v } : r)))
+                          }}
+                          inputMode="decimal"
+                          className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs text-slate-900"
+                          placeholder="0"
+                        />
+                      </td>
+                      {mainToBranch ? (
+                        <td className="px-2 py-1.5">
+                          <input
+                            value={row.branchPrice}
+                            onChange={(e) => {
+                              const v = e.target.value
+                              setLines((rows) =>
+                                rows.map((r) => (r.key === row.key ? { ...r, branchPrice: v } : r)),
+                              )
+                            }}
+                            inputMode="decimal"
+                            placeholder="—"
+                            disabled={!applyBranchPrice}
+                            className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs text-slate-900 disabled:opacity-50"
+                          />
+                        </td>
+                      ) : null}
+                      <td className="px-2 py-1.5">
+                        <button
+                          type="button"
+                          onClick={() => removeLine(row.key)}
+                          className="rounded border border-slate-300 px-1.5 py-1 text-[10px] text-slate-600 hover:bg-slate-100"
+                        >
+                          {t('xfer.direct.bulkRemoveRow')}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <button
+            type="button"
+            onClick={addLine}
+            disabled={!fromId}
+            className="mt-2 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-40"
+          >
+            {t('xfer.direct.bulkAddRow')}
+          </button>
 
           {lastSuccessAt ? (
             <p className="mt-3 rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-xs text-emerald-900">
-              {t('xfer.direct.successBanner')} {lastSuccessAt.slice(0, 19).replace('T', ' ')} UTC
+              {t('xfer.direct.bulkSuccess').replace('{n}', String(transferMut.data?.length ?? '—'))}{' '}
+              <span className="font-mono">{lastSuccessAt.slice(0, 19).replace('T', ' ')} UTC</span>
             </p>
           ) : null}
 
@@ -343,7 +452,7 @@ export function DirectTransferPage() {
 
           <button
             type="button"
-            disabled={transferMut.isPending || !user}
+            disabled={transferMut.isPending || !user || !fromId}
             onClick={onExecute}
             className="mt-4 w-full rounded border border-sky-600 bg-sky-600 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-40"
           >

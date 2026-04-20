@@ -440,13 +440,39 @@ export async function createTransferLine(input: {
   return data
 }
 
-/** Executes each line of a `TransferDocument` sequentially against the API (physical stock posting). */
+/** Many SKUs in one request (`POST api/Transfers/bulk`) — one database transaction on the server. */
+export async function createTransferBulk(input: {
+  fromWarehouseId: number
+  toWarehouseId: number
+  notes: string
+  userId: number
+  lines: { productId: number; quantity: number; branchSalePriceForDestination?: number | null }[]
+}): Promise<number[]> {
+  if (useInventoryMock) {
+    return mockDelay(input.lines.map((l) => 9200 + l.productId))
+  }
+  const { data } = await http.post<number[]>('/api/Transfers/bulk', {
+    fromWarehouseId: input.fromWarehouseId,
+    toWarehouseId: input.toWarehouseId,
+    notes: input.notes,
+    userId: input.userId,
+    lines: input.lines.map((l) => ({
+      productId: l.productId,
+      quantity: l.quantity,
+      branchSalePriceForDestination: l.branchSalePriceForDestination ?? undefined,
+    })),
+  })
+  return data
+}
+
+/** Executes transfer lines: one bulk API call when possible. */
 export async function executeTransferDocumentLines(doc: TransferDocument): Promise<number[]> {
   if (useInventoryMock) {
     return mockDelay(doc.lines.map((_, i) => 9100 + i))
   }
-  const ids: number[] = []
-  for (const line of doc.lines) {
+  if (doc.lines.length === 0) return []
+  if (doc.lines.length === 1) {
+    const line = doc.lines[0]!
     const id = await createTransferLine({
       productId: line.productId,
       quantity: line.quantity,
@@ -456,9 +482,19 @@ export async function executeTransferDocumentLines(doc: TransferDocument): Promi
       userId: doc.userId,
       branchSalePriceForDestination: doc.branchSalePriceForDestination ?? undefined,
     })
-    ids.push(id)
+    return [id]
   }
-  return ids
+  return createTransferBulk({
+    fromWarehouseId: doc.fromWarehouseId,
+    toWarehouseId: doc.toWarehouseId,
+    notes: doc.notes,
+    userId: doc.userId,
+    lines: doc.lines.map((l) => ({
+      productId: l.productId,
+      quantity: l.quantity,
+      branchSalePriceForDestination: doc.branchSalePriceForDestination ?? undefined,
+    })),
+  })
 }
 
 export type StockHistoryQuery = {
