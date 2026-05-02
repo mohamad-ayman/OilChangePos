@@ -47,6 +47,30 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
         return await TransferStockWithinDbAsync(db, request, fromWh, toWh, cancellationToken);
     }
 
+    internal static async Task<int> TransferStockWithinDbAsync(
+        OilChangePosDbContext db,
+        TransferStockRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request.FromWarehouseId == request.ToWarehouseId)
+            throw new InvalidOperationException("المستودع المصدر والوجهة يجب أن يكونا مختلفين.");
+
+        var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == request.UserId, cancellationToken)
+            ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        if (actor.Role != UserRole.Admin)
+            throw new InvalidOperationException("المسؤولون فقط يمكنهم تحويل المخزون.");
+        var fromWh = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == request.FromWarehouseId, cancellationToken)
+            ?? throw new InvalidOperationException("المستودع المصدر غير موجود.");
+        var toWh = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == request.ToWarehouseId, cancellationToken)
+            ?? throw new InvalidOperationException("المستودع الوجهة غير موجود.");
+        if (toWh.Type == WarehouseType.Branch && fromWh.Type != WarehouseType.Main)
+            throw new InvalidOperationException("التحويل للفرع مسموح فقط من المستودع الرئيسي.");
+        if (fromWh.Type == WarehouseType.Branch && toWh.Type == WarehouseType.Branch)
+            throw new InvalidOperationException("التحويل بين الفروع غير مسموح. حوّل من المستودع الرئيسي لكل فرع.");
+
+        return await TransferStockWithinDbAsync(db, request, fromWh, toWh, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<int>> TransferStockBulkAsync(TransferStockBulkRequest bulk, CancellationToken cancellationToken = default)
     {
         if (bulk.Lines.Count == 0)

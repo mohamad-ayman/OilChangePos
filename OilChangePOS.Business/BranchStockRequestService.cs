@@ -4,9 +4,7 @@ using OilChangePOS.Domain;
 
 namespace OilChangePOS.Business;
 
-public sealed class BranchStockRequestService(
-    IDbContextFactory<OilChangePosDbContext> dbFactory,
-    ITransferService transfers) : IBranchStockRequestService
+public sealed class BranchStockRequestService(IDbContextFactory<OilChangePosDbContext> dbFactory) : IBranchStockRequestService
 {
     public async Task<int> CreateForHomeBranchAsync(int userId, CreateBranchStockRequestDto dto, CancellationToken cancellationToken = default)
     {
@@ -96,11 +94,14 @@ public sealed class BranchStockRequestService(
     public async Task FulfillAsync(int adminUserId, int requestId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await using var tx = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken);
         var actor = await RbacRules.RequireUserAsync(db, adminUserId, cancellationToken);
         if (!actor.Role.IsAdmin())
             throw new InvalidOperationException("تنفيذ الطلب متاح للمسؤولين فقط.");
 
-        var row = await db.BranchStockRequests.FirstOrDefaultAsync(x => x.Id == requestId, cancellationToken)
+        var row = await db.BranchStockRequests
+            .FromSqlInterpolated($"SELECT * FROM [BranchStockRequests] WITH (UPDLOCK, ROWLOCK) WHERE [Id] = {requestId}")
+            .FirstOrDefaultAsync(cancellationToken)
             ?? throw new InvalidOperationException("الطلب غير موجود.");
         if (row.Status != BranchStockRequestStatus.Pending)
             throw new InvalidOperationException("يمكن تنفيذ الطلبات المعلّقة فقط.");
@@ -113,7 +114,8 @@ public sealed class BranchStockRequestService(
             throw new InvalidOperationException("طلب التوريد يجب أن يستهدف فرعاً.");
 
         var transferNotes = $"طلب توريد #{row.Id}";
-        var movementId = await transfers.TransferStockAsync(
+        var movementId = await TransferService.TransferStockWithinDbAsync(
+            db,
             new TransferStockRequest(
                 row.ProductId,
                 row.Quantity,
@@ -129,6 +131,7 @@ public sealed class BranchStockRequestService(
         row.ResolutionNotes = null;
         row.FulfillmentStockMovementId = movementId;
         await db.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
     }
 
     public async Task CancelOwnPendingAsync(int userId, int requestId, CancellationToken cancellationToken = default)
