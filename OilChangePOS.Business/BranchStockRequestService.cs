@@ -5,8 +5,7 @@ using OilChangePOS.Domain;
 namespace OilChangePOS.Business;
 
 public sealed class BranchStockRequestService(
-    IDbContextFactory<OilChangePosDbContext> dbFactory,
-    ITransferService transfers) : IBranchStockRequestService
+    IDbContextFactory<OilChangePosDbContext> dbFactory) : IBranchStockRequestService
 {
     public async Task<int> CreateForHomeBranchAsync(int userId, CreateBranchStockRequestDto dto, CancellationToken cancellationToken = default)
     {
@@ -100,35 +99,51 @@ public sealed class BranchStockRequestService(
         if (!actor.Role.IsAdmin())
             throw new InvalidOperationException("تنفيذ الطلب متاح للمسؤولين فقط.");
 
-        var row = await db.BranchStockRequests.FirstOrDefaultAsync(x => x.Id == requestId, cancellationToken)
-            ?? throw new InvalidOperationException("الطلب غير موجود.");
-        if (row.Status != BranchStockRequestStatus.Pending)
-            throw new InvalidOperationException("يمكن تنفيذ الطلبات المعلّقة فقط.");
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var row = await db.BranchStockRequests
+                .FromSqlInterpolated(
+                    $"SELECT * FROM [dbo].[BranchStockRequests] WITH (UPDLOCK, ROWLOCK) WHERE [Id] = {requestId}")
+                .FirstOrDefaultAsync(cancellationToken)
+                ?? throw new InvalidOperationException("الطلب غير موجود.");
+            if (row.Status != BranchStockRequestStatus.Pending)
+                throw new InvalidOperationException("يمكن تنفيذ الطلبات المعلّقة فقط.");
 
-        var main = await db.Warehouses.AsNoTracking().FirstOrDefaultAsync(x => x.Type == WarehouseType.Main, cancellationToken)
-            ?? throw new InvalidOperationException("لم يُعثر على مستودع رئيسي.");
-        var toWh = await db.Warehouses.AsNoTracking().FirstOrDefaultAsync(x => x.Id == row.BranchWarehouseId, cancellationToken)
-            ?? throw new InvalidOperationException("مستودع الفرع غير موجود.");
-        if (toWh.Type != WarehouseType.Branch)
-            throw new InvalidOperationException("طلب التوريد يجب أن يستهدف فرعاً.");
+            var main = await db.Warehouses.FirstOrDefaultAsync(x => x.Type == WarehouseType.Main, cancellationToken)
+                ?? throw new InvalidOperationException("لم يُعثر على مستودع رئيسي.");
+            var toWh = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == row.BranchWarehouseId, cancellationToken)
+                ?? throw new InvalidOperationException("مستودع الفرع غير موجود.");
+            if (toWh.Type != WarehouseType.Branch)
+                throw new InvalidOperationException("طلب التوريد يجب أن يستهدف فرعاً.");
 
-        var transferNotes = $"طلب توريد #{row.Id}";
-        var movementId = await transfers.TransferStockAsync(
-            new TransferStockRequest(
-                row.ProductId,
-                row.Quantity,
-                main.Id,
-                row.BranchWarehouseId,
-                transferNotes,
-                adminUserId),
-            cancellationToken);
+            var transferNotes = $"طلب توريد #{row.Id}";
+            var movementId = await TransferService.TransferStockWithinDbAsync(
+                db,
+                new TransferStockRequest(
+                    row.ProductId,
+                    row.Quantity,
+                    main.Id,
+                    row.BranchWarehouseId,
+                    transferNotes,
+                    adminUserId),
+                main,
+                toWh,
+                cancellationToken);
 
-        row.Status = BranchStockRequestStatus.Fulfilled;
-        row.ResolvedByUserId = adminUserId;
-        row.ResolvedAtUtc = DateTime.UtcNow;
-        row.ResolutionNotes = null;
-        row.FulfillmentStockMovementId = movementId;
-        await db.SaveChangesAsync(cancellationToken);
+            row.Status = BranchStockRequestStatus.Fulfilled;
+            row.ResolvedByUserId = adminUserId;
+            row.ResolvedAtUtc = DateTime.UtcNow;
+            row.ResolutionNotes = null;
+            row.FulfillmentStockMovementId = movementId;
+            await db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await tx.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 
     public async Task CancelOwnPendingAsync(int userId, int requestId, CancellationToken cancellationToken = default)
