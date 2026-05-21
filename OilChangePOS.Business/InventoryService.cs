@@ -193,6 +193,11 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
         foreach (var line in lines)
         {
             var targetWarehouseId = line.WarehouseId == 0 ? warehouseId : line.WarehouseId;
+            var targetWarehouse = targetWarehouseId == warehouseId
+                ? warehouse
+                : await RbacRules.RequireWarehouseAsync(db, targetWarehouseId, cancellationToken);
+            if (!actor.Role.IsAdmin())
+                RbacRules.EnsureBranchStockAudit(actor, targetWarehouse);
             var reasonCode = StockAuditReasonCodes.Normalize(line.ReasonCode);
             var systemQty = await WarehouseStock.GetOnHandAsync(db, line.ProductId, targetWarehouseId, cancellationToken);
             var auditLine = new StockAuditLine
