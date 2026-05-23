@@ -120,6 +120,11 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
                 map[l.ProductId] = l;
             else
             {
+                if (cur.BranchSalePriceForDestination is { } existingPrice
+                    && l.BranchSalePriceForDestination is { } nextPrice
+                    && existingPrice != nextPrice)
+                    throw new InvalidOperationException("لا يمكن إرسال أسعار بيع مختلفة لنفس الصنف في تحويل مجمّع.");
+
                 map[l.ProductId] = cur with
                 {
                     Quantity = cur.Quantity + l.Quantity,
