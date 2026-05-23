@@ -263,6 +263,9 @@ namespace OilChangePOS.Data.Migrations
                     b.Property<DateTime>("ExpenseDateUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<bool>("VisibleInBranchExpenseList")
+                        .HasColumnType("bit");
+
                     b.Property<int?>("WarehouseId")
                         .HasColumnType("int");
 
@@ -284,6 +287,9 @@ namespace OilChangePOS.Data.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("ContainsEstimatedCost")
+                        .HasColumnType("bit");
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
