@@ -63,7 +63,7 @@ public class AuthService(IDbContextFactory<OilChangePosDbContext> dbFactory) : I
     {
         var u = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
             ?? throw new InvalidOperationException("المستخدم غير موجود.");
-        if (u.Role != UserRole.Admin)
+        if (!u.IsActive || u.Role != UserRole.Admin)
             throw new InvalidOperationException("المسؤولون فقط يمكنهم هذه العملية.");
     }
 

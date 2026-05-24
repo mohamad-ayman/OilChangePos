@@ -34,9 +34,9 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
     public async Task<int> AddStockAsync(PurchaseStockRequest request, CancellationToken cancellationToken = default)
     {
         if (request.Quantity <= 0) throw new InvalidOperationException("الكمية يجب أن تكون أكبر من صفر.");
+        if (request.PurchasePrice < 0) throw new InvalidOperationException("سعر الشراء لا يمكن أن يكون سالباً.");
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == request.UserId, cancellationToken)
-            ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        var actor = await RbacRules.RequireUserAsync(db, request.UserId, cancellationToken);
         if (actor.Role != UserRole.Admin)
             throw new InvalidOperationException("المسؤولون فقط يمكنهم إضافة مخزون في المستودع الرئيسي.");
         var warehouse = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == request.WarehouseId, cancellationToken)
@@ -44,32 +44,42 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
         if (warehouse.Type != WarehouseType.Main)
             throw new InvalidOperationException("الشراء مسموح فقط في المستودع الرئيسي.");
 
-        var purchase = new Purchase
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+        try
         {
-            ProductId = request.ProductId,
-            Quantity = request.Quantity,
-            PurchasePrice = request.PurchasePrice,
-            ProductionDate = request.ProductionDate,
-            PurchaseDate = request.PurchaseDate,
-            WarehouseId = request.WarehouseId,
-            CreatedByUserId = request.UserId,
-            Notes = request.Notes
-        };
-        db.Purchases.Add(purchase);
-        await db.SaveChangesAsync(cancellationToken);
+            var purchase = new Purchase
+            {
+                ProductId = request.ProductId,
+                Quantity = request.Quantity,
+                PurchasePrice = request.PurchasePrice,
+                ProductionDate = request.ProductionDate,
+                PurchaseDate = request.PurchaseDate,
+                WarehouseId = request.WarehouseId,
+                CreatedByUserId = request.UserId,
+                Notes = request.Notes
+            };
+            db.Purchases.Add(purchase);
+            await db.SaveChangesAsync(cancellationToken);
 
-        var movement = new StockMovement
+            var movement = new StockMovement
+            {
+                ProductId = request.ProductId,
+                MovementType = StockMovementType.Purchase,
+                Quantity = request.Quantity,
+                ToWarehouseId = request.WarehouseId,
+                ReferenceId = purchase.Id,
+                Notes = $"شراء: {request.Notes}"
+            };
+            db.StockMovements.Add(movement);
+            await db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+            return movement.Id;
+        }
+        catch
         {
-            ProductId = request.ProductId,
-            MovementType = StockMovementType.Purchase,
-            Quantity = request.Quantity,
-            ToWarehouseId = request.WarehouseId,
-            ReferenceId = purchase.Id,
-            Notes = $"شراء: {request.Notes}"
-        };
-        db.StockMovements.Add(movement);
-        await db.SaveChangesAsync(cancellationToken);
-        return movement.Id;
+            await tx.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 
     public async Task<PurchaseReceiptBatchResult> AddPurchaseReceiptBatchAsync(
@@ -84,8 +94,7 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
             throw new InvalidOperationException("أضف سطراً واحداً على الأقل في فاتورة الاستلام.");
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
-            ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        var actor = await RbacRules.RequireUserAsync(db, userId, cancellationToken);
         if (actor.Role != UserRole.Admin)
             throw new InvalidOperationException("المسؤولون فقط يمكنهم تسجيل مشتريات في المستودع الرئيسي.");
 
@@ -193,6 +202,15 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
         foreach (var line in lines)
         {
             var targetWarehouseId = line.WarehouseId == 0 ? warehouseId : line.WarehouseId;
+            if (line.ProductId <= 0)
+                throw new InvalidOperationException("معرّف الصنف غير صالح في سطر الجرد.");
+            if (line.ActualQuantity < 0)
+                throw new InvalidOperationException("الكمية الفعلية في الجرد لا يمكن أن تكون سالبة.");
+            var targetWarehouse = targetWarehouseId == warehouse.Id
+                ? warehouse
+                : await RbacRules.RequireWarehouseAsync(db, targetWarehouseId, cancellationToken);
+            if (!actor.Role.IsAdmin())
+                RbacRules.EnsureBranchStockAudit(actor, targetWarehouse);
             var reasonCode = StockAuditReasonCodes.Normalize(line.ReasonCode);
             var systemQty = await WarehouseStock.GetOnHandAsync(db, line.ProductId, targetWarehouseId, cancellationToken);
             var auditLine = new StockAuditLine
