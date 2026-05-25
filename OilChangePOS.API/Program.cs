@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -59,6 +62,43 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = jwtSection.GetValue<string>("Issuer"),
             ValidAudience = jwtSection.GetValue<string>("Audience"),
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey))
+        };
+        o.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var sub = context.Principal?.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                          ?? context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (!int.TryParse(sub, NumberStyles.None, CultureInfo.InvariantCulture, out var userId))
+                {
+                    context.Fail("Invalid user subject.");
+                    return;
+                }
+
+                var dbFactory = context.HttpContext.RequestServices.GetRequiredService<IDbContextFactory<OilChangePosDbContext>>();
+                await using var db = await dbFactory.CreateDbContextAsync(context.HttpContext.RequestAborted);
+                var user = await db.Users.AsNoTracking()
+                    .Where(x => x.Id == userId)
+                    .Select(x => new { x.IsActive, x.Role, x.HomeBranchWarehouseId })
+                    .FirstOrDefaultAsync(context.HttpContext.RequestAborted);
+                if (user is null || !user.IsActive)
+                {
+                    context.Fail("User is inactive.");
+                    return;
+                }
+
+                var tokenRole = context.Principal?.FindFirstValue(ClaimTypes.Role);
+                if (!string.Equals(tokenRole, user.Role.ToString(), StringComparison.Ordinal))
+                {
+                    context.Fail("User role has changed.");
+                    return;
+                }
+
+                var tokenHomeBranch = context.Principal?.FindFirstValue("home_branch_id");
+                var currentHomeBranch = user.HomeBranchWarehouseId?.ToString(CultureInfo.InvariantCulture);
+                if (!string.Equals(tokenHomeBranch, currentHomeBranch, StringComparison.Ordinal))
+                    context.Fail("User home branch has changed.");
+            }
         };
     });
 
