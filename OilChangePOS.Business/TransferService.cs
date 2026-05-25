@@ -16,6 +16,7 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == request.UserId, cancellationToken)
             ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        RbacRules.EnsureUserIsActive(actor);
         if (actor.Role != UserRole.Admin)
             throw new InvalidOperationException("المسؤولون فقط يمكنهم تحويل المخزون.");
         var fromWh = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == request.FromWarehouseId, cancellationToken)
@@ -62,6 +63,7 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == bulk.UserId, cancellationToken)
             ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        RbacRules.EnsureUserIsActive(actor);
         if (actor.Role != UserRole.Admin)
             throw new InvalidOperationException("المسؤولون فقط يمكنهم تحويل المخزون.");
         var fromWh = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == bulk.FromWarehouseId, cancellationToken)
@@ -120,6 +122,11 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
                 map[l.ProductId] = l;
             else
             {
+                if (cur.BranchSalePriceForDestination is { } existingPrice &&
+                    l.BranchSalePriceForDestination is { } nextPrice &&
+                    existingPrice != nextPrice)
+                    throw new InvalidOperationException("لا يمكن دمج سطور لنفس الصنف بأسعار بيع مختلفة للفرع.");
+
                 map[l.ProductId] = cur with
                 {
                     Quantity = cur.Quantity + l.Quantity,
@@ -132,7 +139,7 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
     }
 
     /// <summary>Writes movements (and optional branch price) for one SKU. Uses <see cref="DbContext.SaveChangesAsync"/>; caller supplies a transaction when multiple steps must be atomic.</summary>
-    private static async Task<int> TransferStockWithinDbAsync(
+    internal static async Task<int> TransferStockWithinDbAsync(
         OilChangePosDbContext db,
         TransferStockRequest request,
         Warehouse fromWh,

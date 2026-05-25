@@ -37,6 +37,7 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == request.UserId, cancellationToken)
             ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        RbacRules.EnsureUserIsActive(actor);
         if (actor.Role != UserRole.Admin)
             throw new InvalidOperationException("المسؤولون فقط يمكنهم إضافة مخزون في المستودع الرئيسي.");
         var warehouse = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == request.WarehouseId, cancellationToken)
@@ -86,6 +87,7 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
             ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        RbacRules.EnsureUserIsActive(actor);
         if (actor.Role != UserRole.Admin)
             throw new InvalidOperationException("المسؤولون فقط يمكنهم تسجيل مشتريات في المستودع الرئيسي.");
 
@@ -193,6 +195,11 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
         foreach (var line in lines)
         {
             var targetWarehouseId = line.WarehouseId == 0 ? warehouseId : line.WarehouseId;
+            var targetWarehouse = targetWarehouseId == warehouse.Id
+                ? warehouse
+                : await RbacRules.RequireWarehouseAsync(db, targetWarehouseId, cancellationToken);
+            if (actor.Role.IsBranchStaff())
+                RbacRules.EnsureBranchStockAudit(actor, targetWarehouse);
             var reasonCode = StockAuditReasonCodes.Normalize(line.ReasonCode);
             var systemQty = await WarehouseStock.GetOnHandAsync(db, line.ProductId, targetWarehouseId, cancellationToken);
             var auditLine = new StockAuditLine

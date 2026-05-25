@@ -14,7 +14,14 @@ public static class RbacRules
     {
         var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
             ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        EnsureUserIsActive(actor);
         return actor;
+    }
+
+    public static void EnsureUserIsActive(AppUser actor)
+    {
+        if (!actor.IsActive)
+            throw new InvalidOperationException("المستخدم غير نشط.");
     }
 
     public static async Task<Warehouse> RequireWarehouseAsync(

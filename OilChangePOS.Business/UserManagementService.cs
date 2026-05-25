@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using OilChangePOS.Data;
 using OilChangePOS.Domain;
@@ -79,17 +80,34 @@ public sealed class UserManagementService(IDbContextFactory<OilChangePosDbContex
         if (userId == requestingUserId && !isActive)
             throw new InvalidOperationException("لا يمكن تعطيل حسابك أثناء الجلسة الحالية.");
 
-        var target = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
-            ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        try
+        {
+            var target = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
+                ?? throw new InvalidOperationException("المستخدم غير موجود.");
 
-        var resolvedHome = await ResolveHomeBranchForRoleAsync(db, role, homeBranchWarehouseId, cancellationToken);
+            var resolvedHome = await ResolveHomeBranchForRoleAsync(db, role, homeBranchWarehouseId, cancellationToken);
 
-        target.Role = role;
-        target.IsActive = isActive;
-        target.HomeBranchWarehouseId = resolvedHome;
+            if (!(role == UserRole.Admin && isActive))
+            {
+                var otherActiveAdminExists = await db.Users.AsNoTracking()
+                    .AnyAsync(u => u.Id != userId && u.IsActive && u.Role == UserRole.Admin, cancellationToken);
+                if (!otherActiveAdminExists)
+                    throw new InvalidOperationException("يجب أن يبقى مسؤول واحد على الأقل نشطاً في النظام.");
+            }
 
-        await db.SaveChangesAsync(cancellationToken);
-        await EnsureAtLeastOneActiveAdminAsync(db, cancellationToken);
+            target.Role = role;
+            target.IsActive = isActive;
+            target.HomeBranchWarehouseId = resolvedHome;
+
+            await db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await tx.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 
     public async Task SetPasswordAsync(int requestingUserId, int userId, string newPassword, CancellationToken cancellationToken = default)
@@ -138,17 +156,11 @@ public sealed class UserManagementService(IDbContextFactory<OilChangePosDbContex
         return homeBranchWarehouseId.Value;
     }
 
-    private static async Task EnsureAtLeastOneActiveAdminAsync(OilChangePosDbContext db, CancellationToken cancellationToken)
-    {
-        var n = await db.Users.CountAsync(u => u.IsActive && u.Role == UserRole.Admin, cancellationToken);
-        if (n == 0)
-            throw new InvalidOperationException("يجب أن يبقى مسؤول واحد على الأقل نشطاً في النظام.");
-    }
-
     private static async Task AssertAuthAdminAsync(OilChangePosDbContext db, int userId, CancellationToken cancellationToken)
     {
         var u = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
             ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        RbacRules.EnsureUserIsActive(u);
         if (u.Role != UserRole.Admin)
             throw new InvalidOperationException("المسؤولون فقط يمكنهم هذه العملية.");
     }
