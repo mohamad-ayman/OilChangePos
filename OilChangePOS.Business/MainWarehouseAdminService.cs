@@ -143,6 +143,9 @@ public sealed class MainWarehouseAdminService(
 
     public async Task UpdatePurchaseLineAsync(UpdateMainWarehousePurchaseRequest request, CancellationToken cancellationToken = default)
     {
+        if (request.Quantity <= 0)
+            throw new InvalidOperationException("الكمية يجب أن تكون أكبر من صفر.");
+
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var purchase = await db.Purchases.FirstOrDefaultAsync(x => x.Id == request.PurchaseId, cancellationToken)
                        ?? throw new InvalidOperationException("عملية الشراء غير موجودة.");
@@ -150,6 +153,11 @@ public sealed class MainWarehouseAdminService(
                       ?? throw new InvalidOperationException("الصنف غير موجود.");
         if (product.Id != request.ProductId)
             throw new InvalidOperationException("تعارض معرف الصنف.");
+        var allocatedOut = await PurchaseBatchLedger.SumAllocatedOutFromPurchaseAsync(
+            db, purchase.WarehouseId, purchase.Id, cancellationToken);
+        if (request.Quantity < allocatedOut)
+            throw new InvalidOperationException("لا يمكن تقليل كمية الشراء لأقل من الكمية المحوّلة أو المباعة من هذه الدفعة.");
+
         product.Name = request.ProductName;
         product.CompanyId = request.CompanyId;
         product.ProductCategory = request.ProductCategory;
@@ -194,6 +202,11 @@ public sealed class MainWarehouseAdminService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var purchase = await db.Purchases.FirstOrDefaultAsync(x => x.Id == purchaseId, cancellationToken)
                        ?? throw new InvalidOperationException("عملية الشراء غير موجودة.");
+        var allocatedOut = await PurchaseBatchLedger.SumAllocatedOutFromPurchaseAsync(
+            db, purchase.WarehouseId, purchase.Id, cancellationToken);
+        if (allocatedOut > 0)
+            throw new InvalidOperationException("لا يمكن حذف دفعة شراء تم تحويل أو بيع مخزون منها.");
+
         var movements = await db.StockMovements
             .Where(x => x.ReferenceId == purchase.Id && x.ProductId == purchase.ProductId)
             .ToListAsync(cancellationToken);
