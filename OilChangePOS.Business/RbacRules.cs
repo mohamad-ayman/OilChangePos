@@ -29,12 +29,12 @@ public static class RbacRules
 
     public static void EnsurePosSaleWarehouse(AppUser actor, Warehouse warehouse)
     {
+        if (warehouse.Type != WarehouseType.Branch)
+            throw new InvalidOperationException("نقطة البيع متاحة على فروع فقط.");
         if (actor.Role.IsAdmin())
             return;
         if (!actor.Role.IsBranchStaff())
             throw new InvalidOperationException("لا يُسمح بتنفيذ البيع لهذا الدور.");
-        if (warehouse.Type != WarehouseType.Branch)
-            throw new InvalidOperationException("نقطة البيع متاحة على فروع فقط.");
         if (actor.HomeBranchWarehouseId != warehouse.Id)
             throw new InvalidOperationException("لا يُسمح بالبيع خارج فرعك المعيّن.");
     }
