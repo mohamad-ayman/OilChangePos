@@ -1,12 +1,11 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using OilChangePOS.Data;
 using OilChangePOS.Domain;
 
 namespace OilChangePOS.Business;
 
-public sealed class BranchStockRequestService(
-    IDbContextFactory<OilChangePosDbContext> dbFactory,
-    ITransferService transfers) : IBranchStockRequestService
+public sealed class BranchStockRequestService(IDbContextFactory<OilChangePosDbContext> dbFactory) : IBranchStockRequestService
 {
     public async Task<int> CreateForHomeBranchAsync(int userId, CreateBranchStockRequestDto dto, CancellationToken cancellationToken = default)
     {
@@ -81,16 +80,23 @@ public sealed class BranchStockRequestService(
         if (!actor.Role.IsAdmin())
             throw new InvalidOperationException("رفض الطلب متاح للمسؤولين فقط.");
 
-        var row = await db.BranchStockRequests.FirstOrDefaultAsync(x => x.Id == requestId, cancellationToken)
+        var now = DateTime.UtcNow;
+        var resolutionNotes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+        var affected = await db.BranchStockRequests
+            .Where(x => x.Id == requestId && x.Status == BranchStockRequestStatus.Pending)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.Status, BranchStockRequestStatus.Rejected)
+                .SetProperty(x => x.ResolvedByUserId, (int?)adminUserId)
+                .SetProperty(x => x.ResolvedAtUtc, (DateTime?)now)
+                .SetProperty(x => x.ResolutionNotes, resolutionNotes),
+                cancellationToken);
+        if (affected == 1)
+            return;
+
+        var row = await db.BranchStockRequests.AsNoTracking().FirstOrDefaultAsync(x => x.Id == requestId, cancellationToken)
             ?? throw new InvalidOperationException("الطلب غير موجود.");
         if (row.Status != BranchStockRequestStatus.Pending)
             throw new InvalidOperationException("يمكن رفض الطلبات المعلّقة فقط.");
-
-        row.Status = BranchStockRequestStatus.Rejected;
-        row.ResolvedByUserId = adminUserId;
-        row.ResolvedAtUtc = DateTime.UtcNow;
-        row.ResolutionNotes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
-        await db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task FulfillAsync(int adminUserId, int requestId, CancellationToken cancellationToken = default)
@@ -99,6 +105,8 @@ public sealed class BranchStockRequestService(
         var actor = await RbacRules.RequireUserAsync(db, adminUserId, cancellationToken);
         if (!actor.Role.IsAdmin())
             throw new InvalidOperationException("تنفيذ الطلب متاح للمسؤولين فقط.");
+
+        await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
 
         var row = await db.BranchStockRequests.FirstOrDefaultAsync(x => x.Id == requestId, cancellationToken)
             ?? throw new InvalidOperationException("الطلب غير موجود.");
@@ -113,7 +121,8 @@ public sealed class BranchStockRequestService(
             throw new InvalidOperationException("طلب التوريد يجب أن يستهدف فرعاً.");
 
         var transferNotes = $"طلب توريد #{row.Id}";
-        var movementId = await transfers.TransferStockAsync(
+        var movementId = await TransferService.TransferStockWithinDbAsync(
+            db,
             new TransferStockRequest(
                 row.ProductId,
                 row.Quantity,
@@ -121,6 +130,8 @@ public sealed class BranchStockRequestService(
                 row.BranchWarehouseId,
                 transferNotes,
                 adminUserId),
+            main,
+            toWh,
             cancellationToken);
 
         row.Status = BranchStockRequestStatus.Fulfilled;
@@ -129,6 +140,7 @@ public sealed class BranchStockRequestService(
         row.ResolutionNotes = null;
         row.FulfillmentStockMovementId = movementId;
         await db.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
     }
 
     public async Task CancelOwnPendingAsync(int userId, int requestId, CancellationToken cancellationToken = default)
@@ -138,18 +150,26 @@ public sealed class BranchStockRequestService(
         if (!actor.Role.IsBranchStaff() || actor.HomeBranchWarehouseId is not { } home)
             throw new InvalidOperationException("لا يُسمح بإلغاء الطلب.");
 
-        var row = await db.BranchStockRequests.FirstOrDefaultAsync(x => x.Id == requestId, cancellationToken)
+        var now = DateTime.UtcNow;
+        var affected = await db.BranchStockRequests
+            .Where(x => x.Id == requestId
+                        && x.BranchWarehouseId == home
+                        && x.Status == BranchStockRequestStatus.Pending)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.Status, BranchStockRequestStatus.Cancelled)
+                .SetProperty(x => x.ResolvedByUserId, (int?)userId)
+                .SetProperty(x => x.ResolvedAtUtc, (DateTime?)now)
+                .SetProperty(x => x.ResolutionNotes, "ألغاه الطالب"),
+                cancellationToken);
+        if (affected == 1)
+            return;
+
+        var row = await db.BranchStockRequests.AsNoTracking().FirstOrDefaultAsync(x => x.Id == requestId, cancellationToken)
             ?? throw new InvalidOperationException("الطلب غير موجود.");
         if (row.BranchWarehouseId != home)
             throw new InvalidOperationException("لا يمكن إلغاء طلب فرع آخر.");
         if (row.Status != BranchStockRequestStatus.Pending)
             throw new InvalidOperationException("يمكن إلغاء الطلبات المعلّقة فقط.");
-
-        row.Status = BranchStockRequestStatus.Cancelled;
-        row.ResolvedByUserId = userId;
-        row.ResolvedAtUtc = DateTime.UtcNow;
-        row.ResolutionNotes = "ألغاه الطالب";
-        await db.SaveChangesAsync(cancellationToken);
     }
 
     private static BranchStockRequestRowDto MapRow(BranchStockRequest x)
