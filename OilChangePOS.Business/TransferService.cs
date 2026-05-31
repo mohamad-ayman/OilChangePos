@@ -49,7 +49,7 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
 
     public async Task<IReadOnlyList<int>> TransferStockBulkAsync(TransferStockBulkRequest bulk, CancellationToken cancellationToken = default)
     {
-        if (bulk.Lines.Count == 0)
+        if (bulk.Lines is null || bulk.Lines.Count == 0)
             throw new InvalidOperationException("أضف سطراً واحداً على الأقل للتحويل المجمّع.");
         if (bulk.Lines.Count > MaxBulkTransferLines)
             throw new InvalidOperationException($"لا يمكن تجاوز {MaxBulkTransferLines} سطراً في تحويل واحد.");
@@ -123,7 +123,9 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
                 map[l.ProductId] = cur with
                 {
                     Quantity = cur.Quantity + l.Quantity,
-                    BranchSalePriceForDestination = l.BranchSalePriceForDestination ?? cur.BranchSalePriceForDestination
+                    BranchSalePriceForDestination = MergeBranchSalePrice(
+                        cur.BranchSalePriceForDestination,
+                        l.BranchSalePriceForDestination)
                 };
             }
         }
@@ -131,8 +133,17 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
         return map.Values.ToList();
     }
 
+    private static decimal? MergeBranchSalePrice(decimal? current, decimal? next)
+    {
+        if (next is null)
+            return current;
+        if (current is null || current.Value == next.Value)
+            return next;
+        throw new InvalidOperationException("لا يمكن دمج سطور مكررة لنفس الصنف بأسعار بيع فرع مختلفة.");
+    }
+
     /// <summary>Writes movements (and optional branch price) for one SKU. Uses <see cref="DbContext.SaveChangesAsync"/>; caller supplies a transaction when multiple steps must be atomic.</summary>
-    private static async Task<int> TransferStockWithinDbAsync(
+    internal static async Task<int> TransferStockWithinDbAsync(
         OilChangePosDbContext db,
         TransferStockRequest request,
         Warehouse fromWh,
