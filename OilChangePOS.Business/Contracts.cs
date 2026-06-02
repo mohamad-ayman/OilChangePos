@@ -68,7 +68,7 @@ public interface ITransferService
 {
     Task<int> TransferStockAsync(TransferStockRequest request, CancellationToken cancellationToken = default);
 
-    /// <summary>Same validation as <see cref="TransferStockAsync"/>; duplicate <c>ProductId</c> lines are merged by summing quantity.</summary>
+    /// <summary>Same validation as <see cref="TransferStockAsync"/>; duplicate <c>ProductId</c> lines are merged by summing quantity when their branch sale prices do not conflict.</summary>
     Task<IReadOnlyList<int>> TransferStockBulkAsync(TransferStockBulkRequest request, CancellationToken cancellationToken = default);
 }
 

@@ -120,15 +120,31 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
                 map[l.ProductId] = l;
             else
             {
+                var mergedPrice = ResolveDuplicateBranchSalePrice(cur, l);
                 map[l.ProductId] = cur with
                 {
                     Quantity = cur.Quantity + l.Quantity,
-                    BranchSalePriceForDestination = l.BranchSalePriceForDestination ?? cur.BranchSalePriceForDestination
+                    BranchSalePriceForDestination = mergedPrice
                 };
             }
         }
 
         return map.Values.ToList();
+    }
+
+    private static decimal? ResolveDuplicateBranchSalePrice(
+        TransferStockBulkLineRequest current,
+        TransferStockBulkLineRequest incoming)
+    {
+        if (current.BranchSalePriceForDestination is not { } currentPrice)
+            return incoming.BranchSalePriceForDestination;
+        if (incoming.BranchSalePriceForDestination is not { } incomingPrice)
+            return currentPrice;
+        if (incomingPrice != currentPrice)
+            throw new InvalidOperationException(
+                $"لا يمكن دمج أسطر الصنف {current.ProductId} بأسعار بيع مختلفة لنفس الفرع.");
+
+        return currentPrice;
     }
 
     /// <summary>Writes movements (and optional branch price) for one SKU. Uses <see cref="DbContext.SaveChangesAsync"/>; caller supplies a transaction when multiple steps must be atomic.</summary>
