@@ -8,21 +8,21 @@ public class SalesService(IDbContextFactory<OilChangePosDbContext> dbFactory) : 
 {
     public async Task<int> CompleteSaleAsync(CompleteSaleRequest request, CancellationToken cancellationToken = default)
     {
-        if (!request.Items.Any()) throw new InvalidOperationException("يجب أن تحتوي الفاتورة على صنف واحد على الأقل.");
+        var items = NormalizeItems(request.Items);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var actor = await RbacRules.RequireUserAsync(db, request.UserId, cancellationToken);
         var saleWarehouse = await RbacRules.RequireWarehouseAsync(db, request.WarehouseId, cancellationToken);
         RbacRules.EnsurePosSaleWarehouse(actor, saleWarehouse);
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
-        var productIds = request.Items.Select(x => x.ProductId).Distinct().ToList();
+        var productIds = items.Select(x => x.ProductId).ToList();
         var products = await db.Products.Where(x => productIds.Contains(x.Id) && x.IsActive).ToDictionaryAsync(x => x.Id, cancellationToken);
         var priceOverrides = await BranchSalePricing.LoadOverridesAsync(db, request.WarehouseId, productIds, cancellationToken);
         var mainWarehouse = await db.Warehouses.AsNoTracking().FirstOrDefaultAsync(x => x.Type == WarehouseType.Main, cancellationToken);
         var mainWarehouseId = mainWarehouse?.Id ?? 0;
 
         var subtotal = 0m;
-        foreach (var item in request.Items)
+        foreach (var item in items)
         {
             if (!products.TryGetValue(item.ProductId, out var product))
                 throw new InvalidOperationException($"الصنف {item.ProductId} غير موجود.");
@@ -34,6 +34,8 @@ public class SalesService(IDbContextFactory<OilChangePosDbContext> dbFactory) : 
             var unit = BranchSalePricing.EffectiveSalePrice(product.UnitPrice, priceOverrides, item.ProductId);
             subtotal += item.Quantity * unit;
         }
+        if (request.DiscountAmount < 0 || request.DiscountAmount > subtotal)
+            throw new InvalidOperationException("قيمة الخصم غير صالحة.");
 
         var invoice = new Invoice
         {
@@ -49,7 +51,7 @@ public class SalesService(IDbContextFactory<OilChangePosDbContext> dbFactory) : 
         await db.SaveChangesAsync(cancellationToken);
 
         var anyEstimatedCogs = false;
-        foreach (var item in request.Items)
+        foreach (var item in items)
         {
             var product = products[item.ProductId];
             var unit = BranchSalePricing.EffectiveSalePrice(product.UnitPrice, priceOverrides, item.ProductId);
@@ -79,5 +81,24 @@ public class SalesService(IDbContextFactory<OilChangePosDbContext> dbFactory) : 
         await db.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
         return invoice.Id;
+    }
+
+    private static List<SaleItemRequest> NormalizeItems(List<SaleItemRequest>? items)
+    {
+        if (items is null || items.Count == 0)
+            throw new InvalidOperationException("يجب أن تحتوي الفاتورة على صنف واحد على الأقل.");
+
+        foreach (var item in items)
+        {
+            if (item.ProductId <= 0)
+                throw new InvalidOperationException("معرّف صنف غير صالح في الفاتورة.");
+            if (item.Quantity <= 0)
+                throw new InvalidOperationException("كمية البيع يجب أن تكون أكبر من صفر.");
+        }
+
+        return items
+            .GroupBy(x => x.ProductId)
+            .Select(g => new SaleItemRequest(g.Key, g.Sum(x => x.Quantity)))
+            .ToList();
     }
 }

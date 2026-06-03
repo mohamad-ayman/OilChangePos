@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -59,6 +62,53 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = jwtSection.GetValue<string>("Issuer"),
             ValidAudience = jwtSection.GetValue<string>("Audience"),
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey))
+        };
+        o.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var principal = context.Principal;
+                var sub = principal?.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                          ?? principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (string.IsNullOrWhiteSpace(sub)
+                    || !int.TryParse(sub, NumberStyles.Integer, CultureInfo.InvariantCulture, out var userId))
+                {
+                    context.Fail("Invalid user claim.");
+                    return;
+                }
+
+                var dbFactory = context.HttpContext.RequestServices.GetRequiredService<IDbContextFactory<OilChangePosDbContext>>();
+                await using var db = await dbFactory.CreateDbContextAsync(context.HttpContext.RequestAborted);
+                var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, context.HttpContext.RequestAborted);
+                if (user is null || !user.IsActive)
+                {
+                    context.Fail("User is inactive or no longer exists.");
+                    return;
+                }
+
+                var tokenRole = principal?.FindFirstValue(ClaimTypes.Role);
+                if (!string.Equals(tokenRole, user.Role.ToString(), StringComparison.Ordinal))
+                {
+                    context.Fail("User role has changed.");
+                    return;
+                }
+
+                var tokenHomeRaw = principal?.FindFirstValue("home_branch_id");
+                int? tokenHome = null;
+                if (!string.IsNullOrWhiteSpace(tokenHomeRaw))
+                {
+                    if (!int.TryParse(tokenHomeRaw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedHome))
+                    {
+                        context.Fail("Invalid home branch claim.");
+                        return;
+                    }
+
+                    tokenHome = parsedHome;
+                }
+
+                if (tokenHome != user.HomeBranchWarehouseId)
+                    context.Fail("User home branch has changed.");
+            }
         };
     });
 
