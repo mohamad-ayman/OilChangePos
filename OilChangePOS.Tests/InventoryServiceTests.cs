@@ -21,9 +21,9 @@ public sealed class InventoryServiceTests
             lines: [new AuditLineRequest(ProductId: 1, ActualQuantity: 7m, WarehouseId: 0)],
             notes: "home branch count");
 
-        await using var db = await factory.CreateDbContextAsync();
+        await using var db = factory.CreateDbContext();
         var movement = await db.StockMovements.SingleAsync(x => x.MovementType == StockMovementType.Adjust);
-        Assert.Equal(1, result.AdjustedLines);
+        Assert.Equal(1, result.AdjustedProductsCount);
         Assert.Equal(2, movement.ToWarehouseId);
         Assert.Null(movement.FromWarehouseId);
         Assert.Equal(2m, movement.Quantity);
@@ -44,7 +44,7 @@ public sealed class InventoryServiceTests
 
         Assert.Contains("خارج فرعك", ex.Message);
 
-        await using var db = await factory.CreateDbContextAsync();
+        await using var db = factory.CreateDbContext();
         Assert.Empty(await db.StockAudits.ToListAsync());
         Assert.Empty(await db.StockAuditLines.ToListAsync());
         Assert.DoesNotContain(await db.StockMovements.ToListAsync(), x => x.MovementType == StockMovementType.Adjust);
