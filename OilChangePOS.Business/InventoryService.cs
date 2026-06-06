@@ -178,6 +178,19 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
             RbacRules.EnsureBranchStockAudit(actor, warehouse);
         else
             throw new InvalidOperationException("لا يُسمح بتنفيذ جرد المخزون لهذا الدور.");
+
+        var effectiveWarehouseIds = lines
+            .Select(line => line.WarehouseId == 0 ? warehouseId : line.WarehouseId)
+            .Distinct()
+            .ToList();
+        foreach (var targetWarehouseId in effectiveWarehouseIds)
+        {
+            var targetWarehouse = targetWarehouseId == warehouseId
+                ? warehouse
+                : await RbacRules.RequireWarehouseAsync(db, targetWarehouseId, cancellationToken);
+            RbacRules.EnsureBranchStockAudit(actor, targetWarehouse);
+        }
+
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
         var audit = new StockAudit
         {
