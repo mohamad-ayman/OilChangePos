@@ -42,7 +42,7 @@ public sealed class InventoryServiceTests
             lines: [new AuditLineRequest(ProductId: 1, ActualQuantity: 0m, WarehouseId: 1)],
             notes: "cross warehouse tamper"));
 
-        Assert.Contains("خارج فرعك", ex.Message);
+        Assert.Contains("مستودعات الفروع", ex.Message);
 
         await using var db = factory.CreateDbContext();
         Assert.Empty(await db.StockAudits.ToListAsync());
