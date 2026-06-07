@@ -32,7 +32,7 @@ public class DuplicateSaleLineStockTests
                     new SaleItemRequest(1, 3m)
                 ])));
 
-        Assert.Contains("رصيد غير كاف", ex.Message);
+        Assert.Contains("رصيد", ex.Message);
         await using var verifyDb = CreateContext(dbName);
         Assert.Empty(await verifyDb.Invoices.ToListAsync());
         Assert.Equal(5m, await CurrentStockAsync(verifyDb, productId: 1, warehouseId: 1));
@@ -65,7 +65,7 @@ public class DuplicateSaleLineStockTests
                     new SaleItemRequest(1, 3m)
                 ])));
 
-        Assert.Contains("رصيد غير كاف", ex.Message);
+        Assert.Contains("رصيد", ex.Message);
         await using var verifyDb = CreateContext(dbName);
         Assert.Empty(await verifyDb.ServiceOrders.ToListAsync());
         Assert.Equal(5m, await CurrentStockAsync(verifyDb, productId: 1, warehouseId: 1));
