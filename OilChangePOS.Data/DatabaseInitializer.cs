@@ -54,6 +54,7 @@ public static class DatabaseInitializer
         // Products.CompanyId must exist before any EF query on Product and before warehouse scripts touch Products.
         await EnsureCatalogCompaniesAsync(dbContext);
         await EnsureWarehouseSchemaAsync(dbContext);
+        await EnsureInvoiceContainsEstimatedCostAsync(dbContext);
         await EnsureExpensesTableAsync(dbContext);
         await EnsureBranchProductPricesTableAsync(dbContext);
 
@@ -688,6 +689,17 @@ public static class DatabaseInitializer
                AND COL_LENGTH(N'dbo.Expenses', N'VisibleInBranchExpenseList') IS NULL
                 ALTER TABLE [dbo].[Expenses] ADD [VisibleInBranchExpenseList] BIT NOT NULL
                     CONSTRAINT [DF_Expenses_VisibleInBranchExpenseList] DEFAULT (1);
+            """);
+    }
+
+    private static async Task EnsureInvoiceContainsEstimatedCostAsync(OilChangePosDbContext dbContext)
+    {
+        await dbContext.Database.ExecuteSqlRawAsync(
+            """
+            IF OBJECT_ID(N'[dbo].[Invoices]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'dbo.Invoices', N'ContainsEstimatedCost') IS NULL
+                ALTER TABLE [dbo].[Invoices] ADD [ContainsEstimatedCost] BIT NOT NULL
+                    CONSTRAINT [DF_Invoices_ContainsEstimatedCost] DEFAULT (0);
             """);
     }
 

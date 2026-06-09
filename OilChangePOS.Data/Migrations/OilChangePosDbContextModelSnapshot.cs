@@ -263,6 +263,9 @@ namespace OilChangePOS.Data.Migrations
                     b.Property<DateTime>("ExpenseDateUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<bool>("VisibleInBranchExpenseList")
+                        .HasColumnType("bit");
+
                     b.Property<int?>("WarehouseId")
                         .HasColumnType("int");
 
@@ -293,6 +296,9 @@ namespace OilChangePOS.Data.Migrations
 
                     b.Property<int?>("CustomerId")
                         .HasColumnType("int");
+
+                    b.Property<bool>("ContainsEstimatedCost")
+                        .HasColumnType("bit");
 
                     b.Property<decimal>("DiscountAmount")
                         .HasPrecision(18, 2)

@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OilChangePOS.Business", "Oi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OilChangePOS.API", "OilChangePOS.API\OilChangePOS.API.csproj", "{023FDE73-2BEA-441D-B6A1-639C86838036}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OilChangePOS.Tests", "OilChangePOS.Tests\OilChangePOS.Tests.csproj", "{3BAB879F-EF4D-42B9-879C-1083E3D9C92F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -69,6 +71,18 @@ Global
 		{023FDE73-2BEA-441D-B6A1-639C86838036}.Release|x64.Build.0 = Release|Any CPU
 		{023FDE73-2BEA-441D-B6A1-639C86838036}.Release|x86.ActiveCfg = Release|Any CPU
 		{023FDE73-2BEA-441D-B6A1-639C86838036}.Release|x86.Build.0 = Release|Any CPU
+		{3BAB879F-EF4D-42B9-879C-1083E3D9C92F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3BAB879F-EF4D-42B9-879C-1083E3D9C92F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3BAB879F-EF4D-42B9-879C-1083E3D9C92F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{3BAB879F-EF4D-42B9-879C-1083E3D9C92F}.Debug|x64.Build.0 = Debug|Any CPU
+		{3BAB879F-EF4D-42B9-879C-1083E3D9C92F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{3BAB879F-EF4D-42B9-879C-1083E3D9C92F}.Debug|x86.Build.0 = Debug|Any CPU
+		{3BAB879F-EF4D-42B9-879C-1083E3D9C92F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3BAB879F-EF4D-42B9-879C-1083E3D9C92F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3BAB879F-EF4D-42B9-879C-1083E3D9C92F}.Release|x64.ActiveCfg = Release|Any CPU
+		{3BAB879F-EF4D-42B9-879C-1083E3D9C92F}.Release|x64.Build.0 = Release|Any CPU
+		{3BAB879F-EF4D-42B9-879C-1083E3D9C92F}.Release|x86.ActiveCfg = Release|Any CPU
+		{3BAB879F-EF4D-42B9-879C-1083E3D9C92F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
