@@ -42,10 +42,10 @@ public sealed class InventoryServiceStockAuditTests
             [new AuditLineRequest(ProductIds.Oil, 5m, 0)],
             "home-branch audit");
 
-        Assert.Equal(1, result.AdjustedCount);
+        Assert.Equal(1, result.AdjustedProductsCount);
 
         await using var db = new OilChangePosDbContext(options);
-        var movement = await Assert.SingleAsync(db.StockMovements);
+        var movement = Assert.Single(await db.StockMovements.ToListAsync());
         Assert.Equal(StockMovementType.Adjust, movement.MovementType);
         Assert.Equal(WarehouseIds.HomeBranch, movement.ToWarehouseId);
         Assert.Null(movement.FromWarehouseId);
