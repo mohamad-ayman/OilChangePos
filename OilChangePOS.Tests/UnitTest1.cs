@@ -94,12 +94,6 @@ public sealed class InventoryServiceStockAuditTests
         await db.SaveChangesAsync();
     }
 
-    private sealed class TestDbContextFactory(DbContextOptions<OilChangePosDbContext> options)
-        : IDbContextFactory<OilChangePosDbContext>
-    {
-        public OilChangePosDbContext CreateDbContext() => new(options);
-    }
-
     private static class WarehouseIds
     {
         public const int Main = 1;
