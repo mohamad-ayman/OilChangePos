@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using OilChangePOS.Data;
 using OilChangePOS.Domain;
@@ -74,6 +75,7 @@ public sealed class UserManagementService(IDbContextFactory<OilChangePosDbContex
         CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         await AssertAuthAdminAsync(db, requestingUserId, cancellationToken);
 
         if (userId == requestingUserId && !isActive)
@@ -84,12 +86,22 @@ public sealed class UserManagementService(IDbContextFactory<OilChangePosDbContex
 
         var resolvedHome = await ResolveHomeBranchForRoleAsync(db, role, homeBranchWarehouseId, cancellationToken);
 
+        var activeAdminCountAfterUpdate = await db.Users.CountAsync(
+            u => u.IsActive
+                 && u.Role == UserRole.Admin
+                 && u.Id != userId,
+            cancellationToken);
+        if (isActive && role == UserRole.Admin)
+            activeAdminCountAfterUpdate++;
+        if (activeAdminCountAfterUpdate == 0)
+            throw new InvalidOperationException("يجب أن يبقى مسؤول واحد على الأقل نشطاً في النظام.");
+
         target.Role = role;
         target.IsActive = isActive;
         target.HomeBranchWarehouseId = resolvedHome;
 
         await db.SaveChangesAsync(cancellationToken);
-        await EnsureAtLeastOneActiveAdminAsync(db, cancellationToken);
+        await tx.CommitAsync(cancellationToken);
     }
 
     public async Task SetPasswordAsync(int requestingUserId, int userId, string newPassword, CancellationToken cancellationToken = default)
@@ -136,13 +148,6 @@ public sealed class UserManagementService(IDbContextFactory<OilChangePosDbContex
             throw new InvalidOperationException("لا يمكن ربط مستخدم بفرع معطّل.");
 
         return homeBranchWarehouseId.Value;
-    }
-
-    private static async Task EnsureAtLeastOneActiveAdminAsync(OilChangePosDbContext db, CancellationToken cancellationToken)
-    {
-        var n = await db.Users.CountAsync(u => u.IsActive && u.Role == UserRole.Admin, cancellationToken);
-        if (n == 0)
-            throw new InvalidOperationException("يجب أن يبقى مسؤول واحد على الأقل نشطاً في النظام.");
     }
 
     private static async Task AssertAuthAdminAsync(OilChangePosDbContext db, int userId, CancellationToken cancellationToken)
