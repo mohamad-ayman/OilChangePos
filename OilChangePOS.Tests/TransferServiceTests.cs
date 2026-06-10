@@ -18,10 +18,11 @@ public sealed class TransferServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.TransferStockBulkAsync(
                 new TransferStockBulkRequest(
-                    UserIds.Admin,
-                    WarehouseIds.Main,
-                    WarehouseIds.Branch,
-                    "bulk conflict",
+                    FromWarehouseId: WarehouseIds.Main,
+                    ToWarehouseId: WarehouseIds.Branch,
+                    Notes: "bulk conflict",
+                    UserId: UserIds.Admin,
+                    Lines:
                     [
                         new TransferStockBulkLineRequest(ProductIds.Oil, 1m, 30m),
                         new TransferStockBulkLineRequest(ProductIds.Oil, 2m, 35m)
@@ -41,10 +42,11 @@ public sealed class TransferServiceTests
 
         var movementIds = await service.TransferStockBulkAsync(
             new TransferStockBulkRequest(
-                UserIds.Admin,
-                WarehouseIds.Main,
-                WarehouseIds.Branch,
-                "bulk merge",
+                FromWarehouseId: WarehouseIds.Main,
+                ToWarehouseId: WarehouseIds.Branch,
+                Notes: "bulk merge",
+                UserId: UserIds.Admin,
+                Lines:
                 [
                     new TransferStockBulkLineRequest(ProductIds.Oil, 1m, 30m),
                     new TransferStockBulkLineRequest(ProductIds.Oil, 2m, 30m)
