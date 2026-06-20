@@ -35,8 +35,7 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
     {
         if (request.Quantity <= 0) throw new InvalidOperationException("الكمية يجب أن تكون أكبر من صفر.");
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == request.UserId, cancellationToken)
-            ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        var actor = await RbacRules.RequireUserAsync(db, request.UserId, cancellationToken);
         if (actor.Role != UserRole.Admin)
             throw new InvalidOperationException("المسؤولون فقط يمكنهم إضافة مخزون في المستودع الرئيسي.");
         var warehouse = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == request.WarehouseId, cancellationToken)
@@ -84,8 +83,7 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
             throw new InvalidOperationException("أضف سطراً واحداً على الأقل في فاتورة الاستلام.");
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
-            ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        var actor = await RbacRules.RequireUserAsync(db, userId, cancellationToken);
         if (actor.Role != UserRole.Admin)
             throw new InvalidOperationException("المسؤولون فقط يمكنهم تسجيل مشتريات في المستودع الرئيسي.");
 
@@ -178,6 +176,7 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
             RbacRules.EnsureBranchStockAudit(actor, warehouse);
         else
             throw new InvalidOperationException("لا يُسمح بتنفيذ جرد المخزون لهذا الدور.");
+        var auditLines = await ValidateAuditLinesAsync(db, actor, warehouseId, lines, cancellationToken);
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
         var audit = new StockAudit
         {
@@ -190,9 +189,9 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
         await db.SaveChangesAsync(cancellationToken);
 
         var adjusted = 0;
-        foreach (var line in lines)
+        foreach (var line in auditLines)
         {
-            var targetWarehouseId = line.WarehouseId == 0 ? warehouseId : line.WarehouseId;
+            var targetWarehouseId = line.WarehouseId;
             var reasonCode = StockAuditReasonCodes.Normalize(line.ReasonCode);
             var systemQty = await WarehouseStock.GetOnHandAsync(db, line.ProductId, targetWarehouseId, cancellationToken);
             var auditLine = new StockAuditLine
@@ -228,6 +227,44 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
         await db.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
         return new StockAuditResultDto(audit.Id, adjusted);
+    }
+
+    private static async Task<List<AuditLineRequest>> ValidateAuditLinesAsync(
+        OilChangePosDbContext db,
+        AppUser actor,
+        int headerWarehouseId,
+        IEnumerable<AuditLineRequest> lines,
+        CancellationToken cancellationToken)
+    {
+        var result = new List<AuditLineRequest>();
+        var seen = new HashSet<(int ProductId, int WarehouseId)>();
+        var warehouses = new Dictionary<int, Warehouse>();
+
+        foreach (var line in lines)
+        {
+            if (line.ProductId <= 0)
+                throw new InvalidOperationException("معرّف الصنف غير صالح في سطر الجرد.");
+            if (line.ActualQuantity < 0)
+                throw new InvalidOperationException("كمية الجرد الفعلية لا يمكن أن تكون سالبة.");
+
+            var targetWarehouseId = line.WarehouseId == 0 ? headerWarehouseId : line.WarehouseId;
+            if (!seen.Add((line.ProductId, targetWarehouseId)))
+                throw new InvalidOperationException("لا يمكن تكرار نفس الصنف لنفس المستودع في جرد واحد.");
+
+            if (!warehouses.TryGetValue(targetWarehouseId, out var targetWarehouse))
+            {
+                targetWarehouse = await RbacRules.RequireWarehouseAsync(db, targetWarehouseId, cancellationToken);
+                warehouses[targetWarehouseId] = targetWarehouse;
+            }
+
+            RbacRules.EnsureBranchStockAudit(actor, targetWarehouse);
+            result.Add(line with { WarehouseId = targetWarehouseId });
+        }
+
+        if (result.Count == 0)
+            throw new InvalidOperationException("أضف سطراً واحداً على الأقل للجرد.");
+
+        return result;
     }
 
     public async Task<List<StockAuditHistoryRowDto>> GetStockAuditHistoryAsync(int? warehouseId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken cancellationToken = default)
