@@ -54,8 +54,10 @@ public static class DatabaseInitializer
         // Products.CompanyId must exist before any EF query on Product and before warehouse scripts touch Products.
         await EnsureCatalogCompaniesAsync(dbContext);
         await EnsureWarehouseSchemaAsync(dbContext);
+        await EnsureInvoiceEstimatedCostSchemaAsync(dbContext);
         await EnsureExpensesTableAsync(dbContext);
         await EnsureBranchProductPricesTableAsync(dbContext);
+        await EnsureBranchStockRequestsTableAsync(dbContext);
 
         await ThrowIfProductsMissingCompanyIdAsync(dbContext.Database);
 
@@ -601,19 +603,6 @@ public static class DatabaseInitializer
 
         await dbContext.Database.ExecuteSqlRawAsync(
             """
-            IF OBJECT_ID(N'[dbo].[StockAudits]', N'U') IS NOT NULL
-               AND COL_LENGTH('dbo.StockAudits', 'WarehouseId') IS NOT NULL
-               AND EXISTS (SELECT 1 FROM [dbo].[StockAudits] WHERE [WarehouseId] IS NULL)
-               AND EXISTS (SELECT 1 FROM [dbo].[Warehouses])
-                UPDATE sa
-                SET [WarehouseId] = w.[Id]
-                FROM [dbo].[StockAudits] sa
-                CROSS JOIN (SELECT TOP 1 [Id] FROM [dbo].[Warehouses] ORDER BY [Id]) w
-                WHERE sa.[WarehouseId] IS NULL;
-            """);
-
-        await dbContext.Database.ExecuteSqlRawAsync(
-            """
             IF OBJECT_ID(N'[dbo].[FK_StockAudits_Warehouses_WarehouseId]', N'F') IS NULL
                AND OBJECT_ID(N'[dbo].[StockAudits]', N'U') IS NOT NULL
                AND COL_LENGTH('dbo.StockAudits', 'WarehouseId') IS NOT NULL
@@ -652,6 +641,17 @@ public static class DatabaseInitializer
                     ALTER TABLE [dbo].[StockMovements] WITH CHECK ADD CONSTRAINT [FK_StockMovements_Purchases_SourcePurchaseId]
                         FOREIGN KEY ([SourcePurchaseId]) REFERENCES [dbo].[Purchases]([Id]);
             END
+            """);
+    }
+
+    private static async Task EnsureInvoiceEstimatedCostSchemaAsync(OilChangePosDbContext dbContext)
+    {
+        await dbContext.Database.ExecuteSqlRawAsync(
+            """
+            IF OBJECT_ID(N'[dbo].[Invoices]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'dbo.Invoices', N'ContainsEstimatedCost') IS NULL
+                ALTER TABLE [dbo].[Invoices] ADD [ContainsEstimatedCost] BIT NOT NULL
+                    CONSTRAINT [DF_Invoices_ContainsEstimatedCost] DEFAULT (0);
             """);
     }
 
@@ -740,6 +740,52 @@ public static class DatabaseInitializer
                 IF OBJECT_ID(N'[dbo].[Products]', N'U') IS NOT NULL
                     ALTER TABLE [dbo].[BranchProductPrices] ADD CONSTRAINT [FK_BranchProductPrices_Products_ProductId]
                         FOREIGN KEY ([ProductId]) REFERENCES [dbo].[Products]([Id]);
+            END
+            """);
+    }
+
+    private static async Task EnsureBranchStockRequestsTableAsync(OilChangePosDbContext dbContext)
+    {
+        await dbContext.Database.ExecuteSqlRawAsync(
+            """
+            IF OBJECT_ID(N'[dbo].[BranchStockRequests]', N'U') IS NULL
+               AND OBJECT_ID(N'[dbo].[Warehouses]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[dbo].[Products]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[dbo].[Users]', N'U') IS NOT NULL
+            BEGIN
+                CREATE TABLE [dbo].[BranchStockRequests](
+                    [Id] INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_BranchStockRequests] PRIMARY KEY,
+                    [BranchWarehouseId] INT NOT NULL,
+                    [ProductId] INT NOT NULL,
+                    [Quantity] DECIMAL(18,3) NOT NULL,
+                    [Notes] NVARCHAR(500) NOT NULL,
+                    [Status] INT NOT NULL,
+                    [RequestedByUserId] INT NOT NULL,
+                    [CreatedAtUtc] DATETIME2 NOT NULL,
+                    [ResolvedByUserId] INT NULL,
+                    [ResolvedAtUtc] DATETIME2 NULL,
+                    [ResolutionNotes] NVARCHAR(500) NULL,
+                    [FulfillmentStockMovementId] INT NULL,
+                    CONSTRAINT [FK_BranchStockRequests_Warehouses_BranchWarehouseId]
+                        FOREIGN KEY ([BranchWarehouseId]) REFERENCES [dbo].[Warehouses]([Id]),
+                    CONSTRAINT [FK_BranchStockRequests_Products_ProductId]
+                        FOREIGN KEY ([ProductId]) REFERENCES [dbo].[Products]([Id]),
+                    CONSTRAINT [FK_BranchStockRequests_Users_RequestedByUserId]
+                        FOREIGN KEY ([RequestedByUserId]) REFERENCES [dbo].[Users]([Id]),
+                    CONSTRAINT [FK_BranchStockRequests_Users_ResolvedByUserId]
+                        FOREIGN KEY ([ResolvedByUserId]) REFERENCES [dbo].[Users]([Id]) ON DELETE SET NULL
+                );
+
+                CREATE NONCLUSTERED INDEX [IX_BranchStockRequests_BranchWarehouseId_Status]
+                    ON [dbo].[BranchStockRequests]([BranchWarehouseId], [Status]);
+                CREATE NONCLUSTERED INDEX [IX_BranchStockRequests_CreatedAtUtc]
+                    ON [dbo].[BranchStockRequests]([CreatedAtUtc]);
+                CREATE NONCLUSTERED INDEX [IX_BranchStockRequests_ProductId]
+                    ON [dbo].[BranchStockRequests]([ProductId]);
+                CREATE NONCLUSTERED INDEX [IX_BranchStockRequests_RequestedByUserId]
+                    ON [dbo].[BranchStockRequests]([RequestedByUserId]);
+                CREATE NONCLUSTERED INDEX [IX_BranchStockRequests_ResolvedByUserId]
+                    ON [dbo].[BranchStockRequests]([ResolvedByUserId]);
             END
             """);
     }

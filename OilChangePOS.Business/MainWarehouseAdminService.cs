@@ -219,8 +219,7 @@ public sealed class MainWarehouseAdminService(
             return 0;
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
-            ?? throw new InvalidOperationException("المستخدم غير موجود.");
+        var actor = await RbacRules.RequireUserAsync(db, userId, cancellationToken);
         if (actor.Role != UserRole.Admin)
             throw new InvalidOperationException("المسؤولون فقط يمكنهم إضافة مخزون في المستودع الرئيسي.");
 
