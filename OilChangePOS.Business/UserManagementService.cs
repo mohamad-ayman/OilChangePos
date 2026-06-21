@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using OilChangePOS.Data;
 using OilChangePOS.Domain;
@@ -74,6 +75,7 @@ public sealed class UserManagementService(IDbContextFactory<OilChangePosDbContex
         CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         await AssertAuthAdminAsync(db, requestingUserId, cancellationToken);
 
         if (userId == requestingUserId && !isActive)
@@ -90,6 +92,7 @@ public sealed class UserManagementService(IDbContextFactory<OilChangePosDbContex
 
         await db.SaveChangesAsync(cancellationToken);
         await EnsureAtLeastOneActiveAdminAsync(db, cancellationToken);
+        await tx.CommitAsync(cancellationToken);
     }
 
     public async Task SetPasswordAsync(int requestingUserId, int userId, string newPassword, CancellationToken cancellationToken = default)
@@ -149,7 +152,7 @@ public sealed class UserManagementService(IDbContextFactory<OilChangePosDbContex
     {
         var u = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
             ?? throw new InvalidOperationException("المستخدم غير موجود.");
-        if (u.Role != UserRole.Admin)
+        if (!u.IsActive || u.Role != UserRole.Admin)
             throw new InvalidOperationException("المسؤولون فقط يمكنهم هذه العملية.");
     }
 }
