@@ -155,5 +155,8 @@ public sealed class CriticalRegressionTests
         : IDbContextFactory<OilChangePosDbContext>
     {
         public OilChangePosDbContext CreateDbContext() => new(options);
+
+        public ValueTask<OilChangePosDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) =>
+            new(CreateDbContext());
     }
 }
