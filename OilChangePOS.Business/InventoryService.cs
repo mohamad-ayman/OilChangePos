@@ -190,9 +190,19 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
         await db.SaveChangesAsync(cancellationToken);
 
         var adjusted = 0;
+        var authorizedWarehouses = new Dictionary<int, Warehouse> { [warehouseId] = warehouse };
         foreach (var line in lines)
         {
             var targetWarehouseId = line.WarehouseId == 0 ? warehouseId : line.WarehouseId;
+            if (!authorizedWarehouses.TryGetValue(targetWarehouseId, out var targetWarehouse))
+            {
+                targetWarehouse = await RbacRules.RequireWarehouseAsync(db, targetWarehouseId, cancellationToken);
+                authorizedWarehouses[targetWarehouseId] = targetWarehouse;
+            }
+
+            if (!actor.Role.IsAdmin())
+                RbacRules.EnsureBranchStockAudit(actor, targetWarehouse);
+
             var reasonCode = StockAuditReasonCodes.Normalize(line.ReasonCode);
             var systemQty = await WarehouseStock.GetOnHandAsync(db, line.ProductId, targetWarehouseId, cancellationToken);
             var auditLine = new StockAuditLine
