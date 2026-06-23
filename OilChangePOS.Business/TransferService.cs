@@ -49,12 +49,12 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
 
     public async Task<IReadOnlyList<int>> TransferStockBulkAsync(TransferStockBulkRequest bulk, CancellationToken cancellationToken = default)
     {
-        if (bulk.Lines.Count == 0)
+        if (bulk.Lines is not { Count: > 0 } lines)
             throw new InvalidOperationException("أضف سطراً واحداً على الأقل للتحويل المجمّع.");
-        if (bulk.Lines.Count > MaxBulkTransferLines)
+        if (lines.Count > MaxBulkTransferLines)
             throw new InvalidOperationException($"لا يمكن تجاوز {MaxBulkTransferLines} سطراً في تحويل واحد.");
 
-        var merged = NormalizeAndMergeBulkLines(bulk.Lines);
+        var merged = NormalizeAndMergeBulkLines(lines);
 
         if (bulk.FromWarehouseId == bulk.ToWarehouseId)
             throw new InvalidOperationException("المستودع المصدر والوجهة يجب أن يكونا مختلفين.");
@@ -120,6 +120,13 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
                 map[l.ProductId] = l;
             else
             {
+                if (cur.BranchSalePriceForDestination.HasValue
+                    && l.BranchSalePriceForDestination.HasValue
+                    && cur.BranchSalePriceForDestination.Value != l.BranchSalePriceForDestination.Value)
+                {
+                    throw new InvalidOperationException("لا يمكن دمج نفس الصنف بأكثر من سعر بيع للفرع في التحويل المجمّع.");
+                }
+
                 map[l.ProductId] = cur with
                 {
                     Quantity = cur.Quantity + l.Quantity,
