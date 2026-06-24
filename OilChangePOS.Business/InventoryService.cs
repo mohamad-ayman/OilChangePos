@@ -170,14 +170,8 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var actor = await RbacRules.RequireUserAsync(db, userId, cancellationToken);
         var warehouse = await RbacRules.RequireWarehouseAsync(db, warehouseId, cancellationToken);
-        if (actor.Role.IsAdmin())
-        {
-            // admin may audit any warehouse
-        }
-        else if (actor.Role.IsBranchStaff())
-            RbacRules.EnsureBranchStockAudit(actor, warehouse);
-        else
-            throw new InvalidOperationException("لا يُسمح بتنفيذ جرد المخزون لهذا الدور.");
+        EnsureCanAuditWarehouse(actor, warehouse);
+        var warehouseCache = new Dictionary<int, Warehouse> { [warehouse.Id] = warehouse };
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
         var audit = new StockAudit
         {
@@ -193,6 +187,13 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
         foreach (var line in lines)
         {
             var targetWarehouseId = line.WarehouseId == 0 ? warehouseId : line.WarehouseId;
+            if (!warehouseCache.TryGetValue(targetWarehouseId, out var targetWarehouse))
+            {
+                targetWarehouse = await RbacRules.RequireWarehouseAsync(db, targetWarehouseId, cancellationToken);
+                EnsureCanAuditWarehouse(actor, targetWarehouse);
+                warehouseCache[targetWarehouseId] = targetWarehouse;
+            }
+
             var reasonCode = StockAuditReasonCodes.Normalize(line.ReasonCode);
             var systemQty = await WarehouseStock.GetOnHandAsync(db, line.ProductId, targetWarehouseId, cancellationToken);
             var auditLine = new StockAuditLine
@@ -228,6 +229,19 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
         await db.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
         return new StockAuditResultDto(audit.Id, adjusted);
+    }
+
+    private static void EnsureCanAuditWarehouse(AppUser actor, Warehouse warehouse)
+    {
+        if (actor.Role.IsAdmin())
+            return;
+        if (actor.Role.IsBranchStaff())
+        {
+            RbacRules.EnsureBranchStockAudit(actor, warehouse);
+            return;
+        }
+
+        throw new InvalidOperationException("لا يُسمح بتنفيذ جرد المخزون لهذا الدور.");
     }
 
     public async Task<List<StockAuditHistoryRowDto>> GetStockAuditHistoryAsync(int? warehouseId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken cancellationToken = default)
