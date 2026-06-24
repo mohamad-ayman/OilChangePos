@@ -105,6 +105,9 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
 
     private static List<TransferStockBulkLineRequest> NormalizeAndMergeBulkLines(List<TransferStockBulkLineRequest> lines)
     {
+        if (lines is null)
+            throw new InvalidOperationException("أضف سطراً واحداً على الأقل للتحويل المجمّع.");
+
         foreach (var l in lines)
         {
             if (l.ProductId <= 0)
@@ -120,10 +123,15 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
                 map[l.ProductId] = l;
             else
             {
+                if (cur.BranchSalePriceForDestination is { } currentPrice
+                    && l.BranchSalePriceForDestination is { } nextPrice
+                    && currentPrice != nextPrice)
+                    throw new InvalidOperationException("لا يمكن تكرار نفس الصنف في التحويل المجمّع بأسعار بيع مختلفة للفرع.");
+
                 map[l.ProductId] = cur with
                 {
                     Quantity = cur.Quantity + l.Quantity,
-                    BranchSalePriceForDestination = l.BranchSalePriceForDestination ?? cur.BranchSalePriceForDestination
+                    BranchSalePriceForDestination = cur.BranchSalePriceForDestination ?? l.BranchSalePriceForDestination
                 };
             }
         }
@@ -132,7 +140,7 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
     }
 
     /// <summary>Writes movements (and optional branch price) for one SKU. Uses <see cref="DbContext.SaveChangesAsync"/>; caller supplies a transaction when multiple steps must be atomic.</summary>
-    private static async Task<int> TransferStockWithinDbAsync(
+    internal static async Task<int> TransferStockWithinDbAsync(
         OilChangePosDbContext db,
         TransferStockRequest request,
         Warehouse fromWh,
