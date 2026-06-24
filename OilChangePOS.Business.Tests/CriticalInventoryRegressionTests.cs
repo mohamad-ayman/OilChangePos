@@ -36,7 +36,7 @@ public sealed class CriticalInventoryRegressionTests
                 "cross branch adjustment"));
 
         await using var verify = factory.CreateDbContext();
-        Assert.Empty(await verify.StockAudits.ToListAsync());
+        Assert.Empty(await verify.StockMovements.Where(m => m.MovementType == StockMovementType.Adjust).ToListAsync());
         Assert.Equal(10m, await StockForWarehouseAsync(verify, seed.ProductId, seed.OtherBranchId));
     }
 
