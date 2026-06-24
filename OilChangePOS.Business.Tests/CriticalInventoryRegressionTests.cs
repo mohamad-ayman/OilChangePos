@@ -1,5 +1,6 @@
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Storage;
 using OilChangePOS.Data;
 using OilChangePOS.Domain;
 
@@ -10,7 +11,7 @@ public sealed class CriticalInventoryRegressionTests
     [Fact]
     public async Task RunStockAuditAsync_rejects_branch_line_for_another_warehouse()
     {
-        using var factory = new SqliteDbContextFactory();
+        using var factory = new InMemoryDbContextFactory();
         var seed = await SeedBasicCatalogAsync(factory);
         await using (var db = factory.CreateDbContext())
         {
@@ -42,7 +43,7 @@ public sealed class CriticalInventoryRegressionTests
     [Fact]
     public async Task CompleteSaleAsync_rejects_duplicate_lines_that_exceed_on_hand()
     {
-        using var factory = new SqliteDbContextFactory();
+        using var factory = new InMemoryDbContextFactory();
         var seed = await SeedBasicCatalogAsync(factory);
         await using (var db = factory.CreateDbContext())
         {
@@ -78,7 +79,7 @@ public sealed class CriticalInventoryRegressionTests
     [Fact]
     public async Task CreateOilChangeServiceAsync_rejects_duplicate_details_that_exceed_on_hand()
     {
-        using var factory = new SqliteDbContextFactory();
+        using var factory = new InMemoryDbContextFactory();
         var seed = await SeedBasicCatalogAsync(factory);
         await using (var db = factory.CreateDbContext())
         {
@@ -115,7 +116,7 @@ public sealed class CriticalInventoryRegressionTests
     [Fact]
     public async Task TransferStockBulkAsync_rejects_conflicting_duplicate_destination_prices()
     {
-        using var factory = new SqliteDbContextFactory();
+        using var factory = new InMemoryDbContextFactory();
         var seed = await SeedBasicCatalogAsync(factory);
         await using (var db = factory.CreateDbContext())
         {
@@ -149,7 +150,7 @@ public sealed class CriticalInventoryRegressionTests
         Assert.Equal(10m, await StockForWarehouseAsync(verify, seed.ProductId, seed.MainWarehouseId));
     }
 
-    private static async Task<SeedIds> SeedBasicCatalogAsync(SqliteDbContextFactory factory)
+    private static async Task<SeedIds> SeedBasicCatalogAsync(InMemoryDbContextFactory factory)
     {
         await using var db = factory.CreateDbContext();
 
@@ -214,17 +215,16 @@ public sealed class CriticalInventoryRegressionTests
         int CustomerId,
         int CarId);
 
-    private sealed class SqliteDbContextFactory : IDbContextFactory<OilChangePosDbContext>, IDisposable
+    private sealed class InMemoryDbContextFactory : IDbContextFactory<OilChangePosDbContext>, IDisposable
     {
-        private readonly SqliteConnection _connection;
+        private readonly InMemoryDatabaseRoot _root = new();
         private readonly DbContextOptions<OilChangePosDbContext> _options;
 
-        public SqliteDbContextFactory()
+        public InMemoryDbContextFactory()
         {
-            _connection = new SqliteConnection("Data Source=:memory:");
-            _connection.Open();
             _options = new DbContextOptionsBuilder<OilChangePosDbContext>()
-                .UseSqlite(_connection)
+                .UseInMemoryDatabase(Guid.NewGuid().ToString(), _root)
+                .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
                 .Options;
 
             using var db = CreateDbContext();
@@ -233,6 +233,8 @@ public sealed class CriticalInventoryRegressionTests
 
         public OilChangePosDbContext CreateDbContext() => new(_options);
 
-        public void Dispose() => _connection.Dispose();
+        public void Dispose()
+        {
+        }
     }
 }
