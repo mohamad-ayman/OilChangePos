@@ -49,7 +49,7 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
 
     public async Task<IReadOnlyList<int>> TransferStockBulkAsync(TransferStockBulkRequest bulk, CancellationToken cancellationToken = default)
     {
-        if (bulk.Lines.Count == 0)
+        if (bulk.Lines is null || bulk.Lines.Count == 0)
             throw new InvalidOperationException("أضف سطراً واحداً على الأقل للتحويل المجمّع.");
         if (bulk.Lines.Count > MaxBulkTransferLines)
             throw new InvalidOperationException($"لا يمكن تجاوز {MaxBulkTransferLines} سطراً في تحويل واحد.");
@@ -120,6 +120,11 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
                 map[l.ProductId] = l;
             else
             {
+                if (cur.BranchSalePriceForDestination is { } currentPrice
+                    && l.BranchSalePriceForDestination is { } nextPrice
+                    && currentPrice != nextPrice)
+                    throw new InvalidOperationException("لا يمكن إدخال سعرين مختلفين لنفس الصنف في التحويل المجمّع.");
+
                 map[l.ProductId] = cur with
                 {
                     Quantity = cur.Quantity + l.Quantity,
@@ -132,7 +137,7 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
     }
 
     /// <summary>Writes movements (and optional branch price) for one SKU. Uses <see cref="DbContext.SaveChangesAsync"/>; caller supplies a transaction when multiple steps must be atomic.</summary>
-    private static async Task<int> TransferStockWithinDbAsync(
+    internal static async Task<int> TransferStockWithinDbAsync(
         OilChangePosDbContext db,
         TransferStockRequest request,
         Warehouse fromWh,
