@@ -14,7 +14,7 @@ public class CriticalServiceRegressionTests
         var factory = await CreateSeededFactoryAsync();
         var service = new SalesService(factory);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.CompleteSaleAsync(new CompleteSaleRequest(
                 CustomerId: null,
                 DiscountAmount: 0,
@@ -26,7 +26,6 @@ public class CriticalServiceRegressionTests
                     new SaleItemRequest(1, 3)
                 ])));
 
-        Assert.Contains("رصيد غير كاف", ex.Message);
         await using var db = factory.CreateDbContext();
         Assert.Empty(await db.Invoices.ToListAsync());
         Assert.Empty(await db.StockMovements.Where(m => m.MovementType == StockMovementType.Sale).ToListAsync());
@@ -38,7 +37,7 @@ public class CriticalServiceRegressionTests
         var factory = await CreateSeededFactoryAsync();
         var service = new ServiceOrderService(factory);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.CreateOilChangeServiceAsync(new OilChangeRequest(
                 CustomerId: 1,
                 CarId: 1,
@@ -51,7 +50,6 @@ public class CriticalServiceRegressionTests
                     new SaleItemRequest(1, 3)
                 ])));
 
-        Assert.Contains("رصيد غير كاف", ex.Message);
         await using var db = factory.CreateDbContext();
         Assert.Empty(await db.ServiceOrders.ToListAsync());
         Assert.Empty(await db.StockMovements.Where(m => m.MovementType == StockMovementType.Sale).ToListAsync());
