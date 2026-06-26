@@ -120,6 +120,11 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
                 map[l.ProductId] = l;
             else
             {
+                if (cur.BranchSalePriceForDestination.HasValue &&
+                    l.BranchSalePriceForDestination.HasValue &&
+                    cur.BranchSalePriceForDestination.Value != l.BranchSalePriceForDestination.Value)
+                    throw new InvalidOperationException("لا يمكن تكرار الصنف بأسعار بيع مختلفة لنفس الفرع في التحويل المجمّع.");
+
                 map[l.ProductId] = cur with
                 {
                     Quantity = cur.Quantity + l.Quantity,
@@ -132,7 +137,7 @@ public class TransferService(IDbContextFactory<OilChangePosDbContext> dbFactory)
     }
 
     /// <summary>Writes movements (and optional branch price) for one SKU. Uses <see cref="DbContext.SaveChangesAsync"/>; caller supplies a transaction when multiple steps must be atomic.</summary>
-    private static async Task<int> TransferStockWithinDbAsync(
+    internal static async Task<int> TransferStockWithinDbAsync(
         OilChangePosDbContext db,
         TransferStockRequest request,
         Warehouse fromWh,
