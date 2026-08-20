@@ -134,19 +134,12 @@ public sealed class BranchStockRequestService(
                 toWh,
                 cancellationToken);
 
-            var now = DateTime.UtcNow;
-            var claimed = await db.BranchStockRequests
-                .Where(x => x.Id == requestId && x.Status == BranchStockRequestStatus.Pending)
-                .ExecuteUpdateAsync(s => s
-                        .SetProperty(x => x.Status, BranchStockRequestStatus.Fulfilled)
-                        .SetProperty(x => x.ResolvedByUserId, adminUserId)
-                        .SetProperty(x => x.ResolvedAtUtc, now)
-                        .SetProperty(x => x.ResolutionNotes, (string?)null)
-                        .SetProperty(x => x.FulfillmentStockMovementId, movementId),
-                    cancellationToken);
-            if (claimed == 0)
-                throw new InvalidOperationException("يمكن تنفيذ الطلبات المعلّقة فقط.");
-
+            row.Status = BranchStockRequestStatus.Fulfilled;
+            row.ResolvedByUserId = adminUserId;
+            row.ResolvedAtUtc = DateTime.UtcNow;
+            row.ResolutionNotes = null;
+            row.FulfillmentStockMovementId = movementId;
+            await db.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);
         }
         catch
