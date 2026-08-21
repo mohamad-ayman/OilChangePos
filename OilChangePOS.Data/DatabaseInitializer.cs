@@ -530,6 +530,14 @@ public static class DatabaseInitializer
 
         await dbContext.Database.ExecuteSqlRawAsync(
             """
+            IF OBJECT_ID(N'[dbo].[Invoices]', N'U') IS NOT NULL
+               AND COL_LENGTH('dbo.Invoices', 'ContainsEstimatedCost') IS NULL
+                ALTER TABLE [dbo].[Invoices] ADD [ContainsEstimatedCost] BIT NOT NULL
+                    CONSTRAINT [DF_Invoices_ContainsEstimatedCost] DEFAULT (0);
+            """);
+
+        await dbContext.Database.ExecuteSqlRawAsync(
+            """
             IF OBJECT_ID(N'[dbo].[Purchases]', N'U') IS NULL
             BEGIN
                 CREATE TABLE [dbo].[Purchases](
