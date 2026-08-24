@@ -60,6 +60,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidAudience = jwtSection.GetValue<string>("Audience"),
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey))
         };
+        o.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = JwtLiveUserGuard.ValidateAsync
+        };
     });
 
 builder.Services.AddAuthorization(o =>
