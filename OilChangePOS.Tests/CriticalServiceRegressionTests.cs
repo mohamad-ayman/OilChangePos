@@ -50,6 +50,24 @@ public class CriticalServiceRegressionTests
     }
 
     [Fact]
+    public async Task CompleteSaleAsync_RejectsNegativeDiscount()
+    {
+        var factory = await CreateSeededFactoryAsync();
+        var service = new SalesService(factory);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CompleteSaleAsync(new CompleteSaleRequest(
+                CustomerId: null,
+                DiscountAmount: -5,
+                UserId: 1,
+                WarehouseId: 2,
+                Items: [new SaleItemRequest(1, 1)])));
+
+        await using var db = factory.CreateDbContext();
+        Assert.Empty(await db.Invoices.ToListAsync());
+    }
+
+    [Fact]
     public async Task CreateOilChangeServiceAsync_RejectsDuplicateDetailsThatExceedMergedStock()
     {
         var factory = await CreateSeededFactoryAsync();
