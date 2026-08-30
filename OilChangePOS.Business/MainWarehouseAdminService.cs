@@ -143,6 +143,11 @@ public sealed class MainWarehouseAdminService(
 
     public async Task UpdatePurchaseLineAsync(UpdateMainWarehousePurchaseRequest request, CancellationToken cancellationToken = default)
     {
+        if (request.Quantity <= 0)
+            throw new InvalidOperationException("الكمية يجب أن تكون أكبر من صفر.");
+        if (request.PurchasePrice < 0)
+            throw new InvalidOperationException("سعر الشراء لا يمكن أن يكون سالباً.");
+
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var purchase = await db.Purchases.FirstOrDefaultAsync(x => x.Id == request.PurchaseId, cancellationToken)
                        ?? throw new InvalidOperationException("عملية الشراء غير موجودة.");
@@ -150,6 +155,13 @@ public sealed class MainWarehouseAdminService(
                       ?? throw new InvalidOperationException("الصنف غير موجود.");
         if (product.Id != request.ProductId)
             throw new InvalidOperationException("تعارض معرف الصنف.");
+
+        var allocatedOut = await PurchaseBatchLedger.SumAllocatedOutFromPurchaseAsync(
+            db, purchase.WarehouseId, purchase.Id, cancellationToken);
+        if (request.Quantity < allocatedOut)
+            throw new InvalidOperationException(
+                $"لا يمكن تقليل كمية الشراء عن الكمية المحوّلة أو المباعة من هذه الدفعة. المحوّل/المباع={allocatedOut}، المطلوب={request.Quantity}");
+
         product.Name = request.ProductName;
         product.CompanyId = request.CompanyId;
         product.ProductCategory = request.ProductCategory;
@@ -159,15 +171,11 @@ public sealed class MainWarehouseAdminService(
         purchase.ProductionDate = request.ProductionDate.Date;
         purchase.PurchaseDate = request.PurchaseDate.Date;
 
-        var movement = await db.StockMovements.FirstOrDefaultAsync(x =>
-            x.ReferenceId == purchase.Id &&
-            x.ProductId == purchase.ProductId &&
-            x.MovementType == StockMovementType.Purchase, cancellationToken);
-        movement ??= await db.StockMovements.FirstOrDefaultAsync(x =>
-            x.ReferenceId == purchase.Id && x.ProductId == purchase.ProductId, cancellationToken);
+        // ReferenceId is shared with invoices/services/audits. Only rewrite the inbound Purchase row.
+        var movement = await PurchaseInboundMovements(db, purchase)
+            .FirstOrDefaultAsync(cancellationToken);
         if (movement is not null)
         {
-            movement.MovementType = StockMovementType.Purchase;
             movement.Quantity = purchase.Quantity;
             movement.ToWarehouseId = purchase.WarehouseId;
             movement.FromWarehouseId = null;
@@ -194,13 +202,28 @@ public sealed class MainWarehouseAdminService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var purchase = await db.Purchases.FirstOrDefaultAsync(x => x.Id == purchaseId, cancellationToken)
                        ?? throw new InvalidOperationException("عملية الشراء غير موجودة.");
-        var movements = await db.StockMovements
-            .Where(x => x.ReferenceId == purchase.Id && x.ProductId == purchase.ProductId)
-            .ToListAsync(cancellationToken);
-        db.StockMovements.RemoveRange(movements);
+
+        var hasAllocatedOut = await db.StockMovements.AsNoTracking().AnyAsync(
+            x => x.SourcePurchaseId == purchase.Id, cancellationToken);
+        if (hasAllocatedOut)
+            throw new InvalidOperationException("لا يمكن حذف عملية شراء تم التحويل أو البيع منها.");
+
+        var inbound = await PurchaseInboundMovements(db, purchase).ToListAsync(cancellationToken);
+        db.StockMovements.RemoveRange(inbound);
         db.Purchases.Remove(purchase);
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// Inbound purchase movements for this receipt. Must not match sales/audits that reuse
+    /// <see cref="StockMovement.ReferenceId"/> with an invoice, service, or audit id equal to the purchase id.
+    /// </summary>
+    private static IQueryable<StockMovement> PurchaseInboundMovements(OilChangePosDbContext db, Purchase purchase) =>
+        db.StockMovements.Where(x =>
+            x.ReferenceId == purchase.Id &&
+            x.ProductId == purchase.ProductId &&
+            x.MovementType == StockMovementType.Purchase &&
+            x.ToWarehouseId == purchase.WarehouseId);
 
     public async Task<int> ImportExcelLinesAsync(int userId, int mainWarehouseId, IReadOnlyList<MainWarehouseExcelImportLineDto> lines, CancellationToken cancellationToken = default)
     {
