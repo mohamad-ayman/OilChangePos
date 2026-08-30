@@ -210,6 +210,188 @@ public class CriticalServiceRegressionTests
         Assert.NotNull(db.Model.FindEntityType(typeof(Expense))!.FindProperty(nameof(Expense.VisibleInBranchExpenseList)));
     }
 
+    [Fact]
+    public async Task DeletePurchaseLineAsync_DoesNotDeleteSaleMovementsWithCollidingReferenceId()
+    {
+        var factory = await CreateSeededFactoryAsync();
+        var purchaseId = await SeedPurchaseWithCollidingSaleAsync(factory, includeInboundPurchaseMovement: true);
+        var main = CreateMainWarehouseService(factory);
+
+        await main.DeletePurchaseLineAsync(purchaseId);
+
+        await using var db = factory.CreateDbContext();
+        Assert.False(await db.Purchases.AnyAsync(p => p.Id == purchaseId));
+        Assert.Empty(await db.StockMovements.Where(m =>
+            m.MovementType == StockMovementType.Purchase && m.ReferenceId == purchaseId).ToListAsync());
+        var sale = Assert.Single(await db.StockMovements.Where(m => m.MovementType == StockMovementType.Sale).ToListAsync());
+        Assert.Equal(2m, sale.Quantity);
+        Assert.Equal(2, sale.FromWarehouseId);
+        Assert.Equal(purchaseId, sale.ReferenceId);
+    }
+
+    [Fact]
+    public async Task UpdatePurchaseLineAsync_DoesNotRewriteCollidingSaleMovement()
+    {
+        var factory = await CreateSeededFactoryAsync();
+        var purchaseId = await SeedPurchaseWithCollidingSaleAsync(factory, includeInboundPurchaseMovement: false);
+        var main = CreateMainWarehouseService(factory);
+
+        await main.UpdatePurchaseLineAsync(new UpdateMainWarehousePurchaseRequest
+        {
+            PurchaseId = purchaseId,
+            ProductId = 1,
+            ProductName = "Oil 5W30",
+            CompanyId = 1,
+            ProductCategory = "Oil",
+            PackageSize = "4L",
+            Quantity = 12,
+            PurchasePrice = 8,
+            ProductionDate = new DateTime(2026, 1, 1),
+            PurchaseDate = new DateTime(2026, 4, 1)
+        });
+
+        await using var db = factory.CreateDbContext();
+        var sale = Assert.Single(await db.StockMovements.Where(m => m.MovementType == StockMovementType.Sale).ToListAsync());
+        Assert.Equal(2m, sale.Quantity);
+        Assert.Equal(2, sale.FromWarehouseId);
+        Assert.Null(sale.ToWarehouseId);
+
+        var inbound = Assert.Single(await db.StockMovements.Where(m =>
+            m.MovementType == StockMovementType.Purchase && m.ReferenceId == purchaseId).ToListAsync());
+        Assert.Equal(12m, inbound.Quantity);
+        Assert.Equal(1, inbound.ToWarehouseId);
+        Assert.Equal(12m, (await db.Purchases.SingleAsync(p => p.Id == purchaseId)).Quantity);
+    }
+
+    [Fact]
+    public async Task UpdatePurchaseLineAsync_RejectsQuantityBelowAllocatedOut()
+    {
+        var factory = await CreateSeededFactoryAsync();
+        var purchaseId = await SeedPurchaseWithAllocatedTransferAsync(factory);
+        var main = CreateMainWarehouseService(factory);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            main.UpdatePurchaseLineAsync(new UpdateMainWarehousePurchaseRequest
+            {
+                PurchaseId = purchaseId,
+                ProductId = 1,
+                ProductName = "Oil 5W30",
+                CompanyId = 1,
+                ProductCategory = "Oil",
+                PackageSize = "4L",
+                Quantity = 3,
+                PurchasePrice = 5,
+                ProductionDate = new DateTime(2026, 1, 1),
+                PurchaseDate = new DateTime(2026, 4, 1)
+            }));
+
+        await using var db = factory.CreateDbContext();
+        Assert.Equal(10m, (await db.Purchases.SingleAsync(p => p.Id == purchaseId)).Quantity);
+    }
+
+    [Fact]
+    public async Task DeletePurchaseLineAsync_RejectsWhenBatchHasAllocatedOut()
+    {
+        var factory = await CreateSeededFactoryAsync();
+        var purchaseId = await SeedPurchaseWithAllocatedTransferAsync(factory);
+        var main = CreateMainWarehouseService(factory);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => main.DeletePurchaseLineAsync(purchaseId));
+
+        await using var db = factory.CreateDbContext();
+        Assert.True(await db.Purchases.AnyAsync(p => p.Id == purchaseId));
+        Assert.Equal(8m, await db.StockMovements
+            .Where(m => m.MovementType == StockMovementType.Transfer && m.SourcePurchaseId == purchaseId)
+            .SumAsync(m => m.Quantity));
+    }
+
+    private static MainWarehouseAdminService CreateMainWarehouseService(TestDbFactory factory) =>
+        new(factory, new InventoryService(factory), new WarehouseService(factory));
+
+    private static async Task<int> SeedPurchaseWithCollidingSaleAsync(TestDbFactory factory, bool includeInboundPurchaseMovement)
+    {
+        await using var db = factory.CreateDbContext();
+        var purchase = new Purchase
+        {
+            ProductId = 1,
+            Quantity = 10,
+            PurchasePrice = 5,
+            ProductionDate = new DateTime(2026, 1, 1),
+            PurchaseDate = new DateTime(2026, 4, 1),
+            WarehouseId = 1,
+            CreatedByUserId = 1,
+            Notes = "receipt"
+        };
+        db.Purchases.Add(purchase);
+        await db.SaveChangesAsync();
+
+        if (includeInboundPurchaseMovement)
+        {
+            db.StockMovements.Add(new StockMovement
+            {
+                ProductId = 1,
+                MovementType = StockMovementType.Purchase,
+                Quantity = 10,
+                ToWarehouseId = 1,
+                ReferenceId = purchase.Id,
+                Notes = "purchase inbound"
+            });
+        }
+
+        db.StockMovements.Add(new StockMovement
+        {
+            ProductId = 1,
+            MovementType = StockMovementType.Sale,
+            Quantity = 2,
+            FromWarehouseId = 2,
+            ReferenceId = purchase.Id,
+            Notes = "بيع نقطة البيع"
+        });
+        await db.SaveChangesAsync();
+        return purchase.Id;
+    }
+
+    private static async Task<int> SeedPurchaseWithAllocatedTransferAsync(TestDbFactory factory)
+    {
+        await using var db = factory.CreateDbContext();
+        var purchase = new Purchase
+        {
+            ProductId = 1,
+            Quantity = 10,
+            PurchasePrice = 5,
+            ProductionDate = new DateTime(2026, 1, 1),
+            PurchaseDate = new DateTime(2026, 4, 1),
+            WarehouseId = 1,
+            CreatedByUserId = 1,
+            Notes = "receipt"
+        };
+        db.Purchases.Add(purchase);
+        await db.SaveChangesAsync();
+
+        db.StockMovements.AddRange(
+            new StockMovement
+            {
+                ProductId = 1,
+                MovementType = StockMovementType.Purchase,
+                Quantity = 10,
+                ToWarehouseId = 1,
+                ReferenceId = purchase.Id,
+                Notes = "purchase inbound"
+            },
+            new StockMovement
+            {
+                ProductId = 1,
+                MovementType = StockMovementType.Transfer,
+                Quantity = 8,
+                FromWarehouseId = 1,
+                ToWarehouseId = 2,
+                SourcePurchaseId = purchase.Id,
+                Notes = "FEFO transfer"
+            });
+        await db.SaveChangesAsync();
+        return purchase.Id;
+    }
+
     private static async Task<TestDbFactory> CreateSeededFactoryAsync()
     {
         var factory = new TestDbFactory();

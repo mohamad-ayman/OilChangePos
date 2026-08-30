@@ -54,21 +54,31 @@ public class InventoryService(IDbContextFactory<OilChangePosDbContext> dbFactory
             CreatedByUserId = request.UserId,
             Notes = request.Notes
         };
-        db.Purchases.Add(purchase);
-        await db.SaveChangesAsync(cancellationToken);
-
-        var movement = new StockMovement
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+        try
         {
-            ProductId = request.ProductId,
-            MovementType = StockMovementType.Purchase,
-            Quantity = request.Quantity,
-            ToWarehouseId = request.WarehouseId,
-            ReferenceId = purchase.Id,
-            Notes = $"شراء: {request.Notes}"
-        };
-        db.StockMovements.Add(movement);
-        await db.SaveChangesAsync(cancellationToken);
-        return movement.Id;
+            db.Purchases.Add(purchase);
+            await db.SaveChangesAsync(cancellationToken);
+
+            var movement = new StockMovement
+            {
+                ProductId = request.ProductId,
+                MovementType = StockMovementType.Purchase,
+                Quantity = request.Quantity,
+                ToWarehouseId = request.WarehouseId,
+                ReferenceId = purchase.Id,
+                Notes = $"شراء: {request.Notes}"
+            };
+            db.StockMovements.Add(movement);
+            await db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+            return movement.Id;
+        }
+        catch
+        {
+            await tx.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 
     public async Task<PurchaseReceiptBatchResult> AddPurchaseReceiptBatchAsync(
