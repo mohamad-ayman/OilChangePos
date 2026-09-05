@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { POSCartPanel } from '@/features/pos/components/POSCartPanel'
 import { POSCheckoutModal } from '@/features/pos/components/POSCheckoutModal'
@@ -25,6 +25,8 @@ export function POSPage() {
   const [checkoutOpen, setCheckoutOpen] = useState(false)
   const [checkoutBusy, setCheckoutBusy] = useState(false)
   const [lastInvoice, setLastInvoice] = useState<InvoiceDto | null>(null)
+  /** Synchronous guard — React `busy` state is too late to stop cancel/re-submit while POST is in flight. */
+  const checkoutInFlightRef = useRef(false)
 
   const stockByProduct = useMemo(() => {
     const m = new Map<number, number>()
@@ -76,30 +78,40 @@ export function POSPage() {
 
   const confirmCheckout = useCallback(
     async (paymentMethod: 'cash' | 'card') => {
-      if (!user) return
+      if (!user || checkoutInFlightRef.current) return
+      checkoutInFlightRef.current = true
       setCheckoutBusy(true)
-      const result = await runCheckout({
-        cart: cartApi.cart,
-        ledger,
-        warehouseId: wid,
-        userId: user.id,
-        paymentMethod,
-      })
-      setCheckoutBusy(false)
-      if (result.ok) {
-        setLastInvoice(result.invoice)
-        cartApi.clearCart()
+      let posted = false
+      try {
+        const result = await runCheckout({
+          cart: cartApi.cart,
+          ledger,
+          warehouseId: wid,
+          userId: user.id,
+          paymentMethod,
+        })
+        if (result.ok) {
+          setLastInvoice(result.invoice)
+          cartApi.clearCart()
+          posted = true
+        } else {
+          window.alert(`${t('common.error')}: ${result.message}`)
+        }
+      } finally {
+        checkoutInFlightRef.current = false
+        setCheckoutBusy(false)
+      }
+      if (posted) {
         await qc.invalidateQueries({ queryKey: posKeys.root })
         await qc.invalidateQueries({ queryKey: inventoryKeys.root })
         void refetch()
-      } else {
-        window.alert(`${t('common.error')}: ${result.message}`)
       }
     },
     [user, cartApi, ledger, wid, qc, refetch],
   )
 
   const closeModal = useCallback(() => {
+    if (checkoutInFlightRef.current) return
     setCheckoutOpen(false)
     setLastInvoice(null)
   }, [])
