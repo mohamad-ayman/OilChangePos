@@ -25,7 +25,13 @@ export function POSCheckoutModal({
 
   return (
     <>
-      <button type="button" className="fixed inset-0 z-40 bg-slate-900/35" aria-label={t('common.close')} onClick={onClose} />
+      <button
+        type="button"
+        className="fixed inset-0 z-40 bg-slate-900/35 disabled:cursor-wait"
+        aria-label={t('common.close')}
+        disabled={busy}
+        onClick={onClose}
+      />
       <div
         className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 border border-slate-300 bg-white p-4 shadow-2xl"
         role="dialog"
@@ -37,19 +43,20 @@ export function POSCheckoutModal({
             <p className="mt-1 font-mono text-lg text-sky-800">{grandTotal.toFixed(2)}</p>
             <div className="mt-3 flex gap-2">
               <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700">
-                <input type="radio" checked={method === 'cash'} onChange={() => setMethod('cash')} />
+                <input type="radio" checked={method === 'cash'} onChange={() => setMethod('cash')} disabled={busy} />
                 {t('pos.cash')}
               </label>
               <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700">
-                <input type="radio" checked={method === 'card'} onChange={() => setMethod('card')} />
+                <input type="radio" checked={method === 'card'} onChange={() => setMethod('card')} disabled={busy} />
                 {t('pos.card')}
               </label>
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
+                disabled={busy}
                 onClick={onClose}
-                className="rounded border border-slate-400 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100"
+                className="rounded border border-slate-400 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-40"
               >
                 {t('pos.cancel')}
               </button>
@@ -87,8 +94,9 @@ export function POSCheckoutModal({
             </p>
             <button
               type="button"
+              disabled={busy}
               onClick={onClose}
-              className="mt-4 w-full rounded border border-slate-400 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-100"
+              className="mt-4 w-full rounded border border-slate-400 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-100 disabled:opacity-40"
             >
               {t('common.close')}
             </button>
